@@ -1,0 +1,118 @@
+# fay-display-carveout-owners.txt - MacBook Air M3 (J613), macOS 27.0 (26A428), firmware 20457.1.29
+# Source: ~/Desktop/fay-devicetree.txt (16:53), node tracking with /\+-o /. Values unchanged.
+# Format: <node> | <property line as printed by ioreg>
+#
+# Task 1 (display nodes, name or value contains carve|region|memory|reserved|sram):
+#   only IODeviceMemory (MMIO) and pt-region-N on the DARTs. No carve/reserved/sram properties.
+# Task 2 (carveout-memory-map, non region-id-NN): one region-name-id-NN per region-id, all <00>
+#   (empty, no labels), plus AAPL,phandle and name.
+#
+# Mika's cross-check (decoded pt-region-N as start/end, 8 bytes LE each, vs region-id base/size):
+#   dart-dcp      pt-region-5  0x103ffec4000-0x103fff04000 (256 KiB) = region-id-18 exactly
+#   dart-disp0    pt-region-4  0x103ffeb4000-0x103ffec4000 ( 64 KiB) = region-id-17 exactly
+#   dart-disp0    pt-region-0  0x103fff04000-0x103fff44000 (256 KiB) = region-id-16 exactly
+#   dart-dcpext   pt-region-5  0x103ffe34000-0x103ffe74000 (256 KiB) = region-id-70 exactly
+#   dart-dispext0 pt-region-4  0x103ffe24000-0x103ffe34000 ( 64 KiB) = region-id-69 exactly
+#   dart-dispext0 pt-region-0  0x103ffe74000-0x103ffeb4000 (256 KiB) = region-id-68 exactly
+#
+disp0@7C000000 | "IODeviceMemory" = (({"address"=10938744832,"length"=6881280}),({"address"=10947133440,"length"=6881280}),({"address"=10958798848,"length"=16384}),({"address"=10958946304,"length"=16384}),({"address"=10980687872,"length"=8388608}),({"address"=12083593216,"length"=16384}))
+dcp@7EC00000 | "IODeviceMemory" = (({"address"=10984882176,"length"=442368}),({"address"=10981015552,"length"=16384}))
+dart-dcp@7D30C000 | "IODeviceMemory" = (({"address"=10958716928,"length"=16384}))
+dart-dcp@7D30C000 | "pt-region-5" = <0040ecff030100000040f0ff03010000>
+dart-disp0@7D304000 | "pt-region-4" = <0040ebff030100000040ecff03010000>
+dart-disp0@7D304000 | "IODeviceMemory" = (({"address"=10958684160,"length"=16384}),({"address"=10958667776,"length"=16384}))
+dart-disp0@7D304000 | "pt-region-0" = <0040f0ff030100000040f4ff03010000>
+dcpext@AC00000 | "IODeviceMemory" = (({"address"=13333692416,"length"=442368}),({"address"=13329825792,"length"=16384}))
+dart-dcpext@930C000 | "IODeviceMemory" = (({"address"=13307527168,"length"=16384}))
+dart-dcpext@930C000 | "pt-region-5" = <0040e3ff030100000040e7ff03010000>
+dart-dispext0@9304000 | "pt-region-4" = <0040e2ff030100000040e3ff03010000>
+dart-dispext0@9304000 | "IODeviceMemory" = (({"address"=13307494400,"length"=16384}),({"address"=13307478016,"length"=16384}))
+dart-dispext0@9304000 | "pt-region-0" = <0040e7ff030100000040ebff03010000>
+carveout-memory-map | "region-name-id-29" = <00>
+carveout-memory-map | "region-name-id-46" = <00>
+carveout-memory-map | "region-name-id-193" = <00>
+carveout-memory-map | "AAPL,phandle" = <09000000>
+carveout-memory-map | "region-name-id-168" = <00>
+carveout-memory-map | "region-name-id-50" = <00>
+carveout-memory-map | "region-name-id-181" = <00>
+carveout-memory-map | "region-name-id-25" = <00>
+carveout-memory-map | "region-name-id-258" = <00>
+carveout-memory-map | "region-name-id-63" = <00>
+carveout-memory-map | "region-name-id-7" = <00>
+carveout-memory-map | "region-name-id-17" = <00>
+carveout-memory-map | "region-name-id-166" = <00>
+carveout-memory-map | "region-name-id-191" = <00>
+carveout-memory-map | "region-name-id-154" = <00>
+carveout-memory-map | "region-name-id-97" = <00>
+carveout-memory-map | "region-name-id-76" = <00>
+carveout-memory-map | "region-name-id-55" = <00>
+carveout-memory-map | "region-name-id-80" = <00>
+carveout-memory-map | "region-name-id-176" = <00>
+carveout-memory-map | "region-name-id-164" = <00>
+carveout-memory-map | "region-name-id-8" = <00>
+carveout-memory-map | "region-name-id-68" = <00>
+carveout-memory-map | "region-name-id-47" = <00>
+carveout-memory-map | "name" = <"carveout-memory-map">
+carveout-memory-map | "region-name-id-26" = <00>
+carveout-memory-map | "region-name-id-266" = <00>
+carveout-memory-map | "region-name-id-217" = <00>
+carveout-memory-map | "region-name-id-205" = <00>
+carveout-memory-map | "region-name-id-64" = <00>
+carveout-memory-map | "region-name-id-344" = <00>
+carveout-memory-map | "region-name-id-18" = <00>
+carveout-memory-map | "region-name-id-264" = <00>
+carveout-memory-map | "region-name-id-98" = <00>
+carveout-memory-map | "region-name-id-77" = <00>
+carveout-memory-map | "region-name-id-203" = <00>
+carveout-memory-map | "region-name-id-159" = <00>
+carveout-memory-map | "region-name-id-81" = <00>
+carveout-memory-map | "region-name-id-56" = <00>
+carveout-memory-map | "region-name-id-184" = <00>
+carveout-memory-map | "region-name-id-1" = <00>
+carveout-memory-map | "region-name-id-14" = <00>
+carveout-memory-map | "region-name-id-69" = <00>
+carveout-memory-map | "region-name-id-94" = <00>
+carveout-memory-map | "region-name-id-73" = <00>
+carveout-memory-map | "region-name-id-194" = <00>
+carveout-memory-map | "region-name-id-48" = <00>
+carveout-memory-map | "region-name-id-182" = <00>
+carveout-memory-map | "region-name-id-52" = <00>
+carveout-memory-map | "region-name-id-31" = <00>
+carveout-memory-map | "region-name-id-259" = <00>
+carveout-memory-map | "region-name-id-2" = <00>
+carveout-memory-map | "region-name-id-90" = <00>
+carveout-memory-map | "region-name-id-179" = <00>
+carveout-memory-map | "region-name-id-19" = <00>
+carveout-memory-map | "region-name-id-167" = <00>
+carveout-memory-map | "region-name-id-23" = <00>
+carveout-memory-map | "region-name-id-180" = <00>
+carveout-memory-map | "region-name-id-155" = <00>
+carveout-memory-map | "region-name-id-78" = <00>
+carveout-memory-map | "region-name-id-269" = <00>
+carveout-memory-map | "region-name-id-57" = <00>
+carveout-memory-map | "region-name-id-61" = <00>
+carveout-memory-map | "region-name-id-36" = <00>
+carveout-memory-map | "region-name-id-177" = <00>
+carveout-memory-map | "region-name-id-190" = <00>
+carveout-memory-map | "region-name-id-165" = <00>
+carveout-memory-map | "region-name-id-153" = <00>
+carveout-memory-map | "region-name-id-95" = <00>
+carveout-memory-map | "region-name-id-74" = <00>
+carveout-memory-map | "region-name-id-49" = <00>
+carveout-memory-map | "region-name-id-53" = <00>
+carveout-memory-map | "region-name-id-28" = <00>
+carveout-memory-map | "region-name-id-32" = <00>
+carveout-memory-map | "region-name-id-4" = <00>
+carveout-memory-map | "region-name-id-163" = <00>
+carveout-memory-map | "region-name-id-91" = <00>
+carveout-memory-map | "region-name-id-70" = <00>
+carveout-memory-map | "region-name-id-45" = <00>
+carveout-memory-map | "region-name-id-24" = <00>
+carveout-memory-map | "region-name-id-265" = <00>
+carveout-memory-map | "region-name-id-79" = <00>
+carveout-memory-map | "region-name-id-185" = <00>
+carveout-memory-map | "region-name-id-204" = <00>
+carveout-memory-map | "region-name-id-62" = <00>
+carveout-memory-map | "region-name-id-343" = <00>
+carveout-memory-map | "region-name-id-16" = <00>
+carveout-memory-map | "region-name-id-96" = <00>
