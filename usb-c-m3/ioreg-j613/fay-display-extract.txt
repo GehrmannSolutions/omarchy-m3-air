@@ -1,0 +1,407 @@
+73:    | |   "display-rotation" = <00000000>
+90:    | |   "firmware-version" = <6d426f6f742d32303435372e312e3239000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000>
+93:    | |   "disable-accessory-firmware" = <00000000>
+102:    | |   "display-corner-radius" = <00000000>
+104:    | |   "display-boot-rotation" = <00000000>
+147:    | |   "display-scale" = <02000000>
+166:    | |   "system-firmware-version" = <"mBoot-20457.1.29">
+323:    | |     "dcpf" = <7800f6ff03010000402e000000000000>
+336:    | |     "dcp2" = <a03bf6ff030100006b1c000000000000>
+365:    | |     "dcp2" = <18fb1381923c1dbb00da75d816c6a47f5ec1d6e12b4915fff32217860f1f12f391774ba9e70854a058a3dbae9f4bc415>
+379:    | |     "dcpf" = <64d59d4896900a9fc51faa8fed154d5347b48f1187fcd8680f8c83bcd9db7b823c4d2ebad38800b8a14a4ce6c6c5a526>
+849:    |     "dcp0" = <"/arm-io/dcp">
+851:    |     "dcpext0" = <"/arm-io/dcpext">
+879:    |     "display-crossbar0" = <0000000000000000011000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000>
+1277:    | |       "function-hid_event_dispatch" = <5201000044747542>
+1323:    | |   |   "firmware-ver" = <01240000>
+1324:    | |   |   "firmware" = <01000000>
+1691:    | |     "pcie-throttle-firmware-load" = <01000000>
+1796:    | | | |   "function-dart_force_active" = <4800000074636146>
+1800:    | | | |   "function-dart_request_sid" = <4800000071655253>
+1806:    | | | |   "function-dart_release_sid" = <480000006c655253>
+1807:    | | | |   "function-dart_self" = <48000000666c6553>
+1858:    | |   |   "function-dart_release_sid" = <480000006c655253>
+1863:    | |   |   "function-dart_request_sid" = <4800000071655253>
+1869:    | |   |   "function-dart_force_active" = <4800000074636146>
+1902:    | |   |   "function-dart_self" = <48000000666c6553>
+2018:    | +-o dart-apcie0@94000000  <class AppleARMIODevice, id 0x10000029b, registered, matched, active, busy 0 (227 ms), retain 11>
+2020:    | | |   "dart-id" = <00000000>
+2027:    | | |   "dart-options" = <37000000>
+2030:    | | |   "name" = <"dart-apcie0">
+2034:    | | |   "compatible" = <"dart,t8110">
+2040:    | | |   "dart-tunables-instance-0" = <0c02000004000000b701008000000000b70100800000000020020000040000000f0f0f00000000000f0f0f00000000002402000004000000ffffff000000000008080800000000002c02000004000000000000070000000000000004000000000003000004000000311f00000000000001000000000000000803000004000000fcffff3f0000000000000010000000001003000004000000fcffff3f00000000fcffff3f000000001803000004000000311f00000000000001000000000000002003000004000000fcffff3f000000000000f001000000002803000004000000fcffff3f00000000fcbff00100000000>
+2043:    | | |   "device_type" = <"dart">
+2044:    | | |   "IOReportLegend" = ({"IOReportGroupName"="Interrupt Statistics (by index)","IOReportChannels"=((5291294645182005248,4295098369,"               First Level Interrupt Handler Count"),(5291294645182005249,4295098369,"              Second Level Interrupt Handler Count"),(5291294645182005250,4295098369,"        First Level Interrupt Handler Time (MATUs)"),(5291294645182005251,4295098369,"   Second Level Interrupt Handler CPU Time (MATUs)"),(5291294645182005252,4295098369,"Second Level Interrupt Handler System Time (MATUs)")),"IOReportChannelInfo"={"IOReportChannelUnit"=0},"IOReportSubGroupName"="dart-apcie0 0"})
+2051:    | | |     "device_type" = <"dart-mapper">
+2060:    | | |     "device_type" = <"dart-mapper">
+2069:    | |       "device_type" = <"dart-mapper">
+2130:    | |       "no-firmware-service" = <>
+2131:    | |       "reconfig-firmware" = <>
+2192:    | | |     "function-dart_force_active" = <5100000074636146>
+2195:    | | |     "function-dart_request_sid" = <5100000071655253>
+2201:    | | |     "function-dart_release_sid" = <510000006c655253>
+2203:    | | |     "function-dart_self" = <51000000666c6553>
+2217:    | |       "function-dart_release_sid" = <510000006c655253>
+2222:    | |       "function-dart_request_sid" = <5100000071655253>
+2226:    | |       "function-dart_force_active" = <5100000074636146>
+2254:    | |       "function-dart_self" = <51000000666c6553>
+2267:    | +-o dart-apciec0@21008000  <class AppleARMIODevice, id 0x1000002a0, registered, matched, active, busy 0 (217 ms), retain 9>
+2269:    | | |   "dart-id" = <01000000>
+2276:    | | |   "dart-options" = <37000000>
+2280:    | | |   "name" = <"dart-apciec0">
+2283:    | | |   "compatible" = <"dart,t8110">
+2290:    | | |   "dart-tunables-instance-0" = <0c02000004000000b701008000000000b70100800000000020020000040000000f0f0f00000000000f0f0f00000000002402000004000000ffffff000000000008080800000000000003000004000000311f00000000000001000000000000000803000004000000fcffff3f0000000000000010000000001003000004000000fcffff3f00000000fcffff3f000000001803000004000000311f00000000000001000000000000002003000004000000fcffff3f000000000000f001000000002803000004000000fcffff3f00000000fcbff00100000000>
+2294:    | | |   "device_type" = <"dart">
+2295:    | | |   "IOReportLegend" = ({"IOReportGroupName"="Interrupt Statistics (by index)","IOReportChannels"=((5291294645182005248,4295098369,"               First Level Interrupt Handler Count"),(5291294645182005249,4295098369,"              Second Level Interrupt Handler Count"),(5291294645182005250,4295098369,"        First Level Interrupt Handler Time (MATUs)"),(5291294645182005251,4295098369,"   Second Level Interrupt Handler CPU Time (MATUs)"),(5291294645182005252,4295098369,"Second Level Interrupt Handler System Time (MATUs)")),"IOReportChannelInfo"={"IOReportChannelUnit"=0},"IOReportSubGroupName"="dart-apciec0 0"})
+2302:    | |       "device_type" = <"dart-mapper">
+2345:    | |     "function-dart_force_active" = <5500000074636146>
+2383:    | +-o dart-acio0@1A80000  <class AppleARMIODevice, id 0x1000002a4, registered, matched, active, busy 0 (227 ms), retain 32>
+2386:    | | |   "dart-id" = <02000000>
+2394:    | | |   "dart-options" = <07000000>
+2397:    | | |   "name" = <"dart-acio0">
+2400:    | | |   "compatible" = <"dart,t8110">
+2407:    | | |   "dart-tunables-instance-0" = <0c02000004000000b701008000000000b70100800000000020020000040000000f0f0f00000000000f0f0f00000000002402000004000000ffffff000000000008080800000000000003000004000000311f00000000000001000000000000000803000004000000fcffff3f0000000000000010000000001003000004000000fcffff3f00000000fcffff3f000000001803000004000000311f00000000000001000000000000002003000004000000fcffff3f000000000000f001000000002803000004000000fcffff3f00000000fcbff0010000000000080000040000003f000f0000000000000001000000000004080000040000003f000f0000000000020001000000000008080000040000003f000f000000000004000100000000000c080000040000003f000f0000000000060002000000000010080000040000003f000f00000000000a0002000000000014080000040000003f000f00000000000e0002000000000018080000040000003f000f000000000012000200000000001c080000040000003f000f0000000000160002000000000020080000040000003f000f00000000001a0002000000000024080000040000003f000f00000000001e0002000000000028080000040000003f000f000000000022000200000000002c080000040000003f000f0000000000260002000000000030080000040000003f000f00000000002a0002000000000034080000040000003f000f00000000002e0002000000000038080000040000003f000f000000000032000200000000003c080000040000003f000f00000000003600010000000000>
+2410:    | | |   "device_type" = <"dart">
+2411:    | | |   "IOReportLegend" = ({"IOReportGroupName"="Interrupt Statistics (by index)","IOReportChannels"=((5291294645182005248,4295098369,"               First Level Interrupt Handler Count"),(5291294645182005249,4295098369,"              Second Level Interrupt Handler Count"),(5291294645182005250,4295098369,"        First Level Interrupt Handler Time (MATUs)"),(5291294645182005251,4295098369,"   Second Level Interrupt Handler CPU Time (MATUs)"),(5291294645182005252,4295098369,"Second Level Interrupt Handler System Time (MATUs)")),"IOReportChannelInfo"={"IOReportChannelUnit"=0},"IOReportSubGroupName"="dart-acio0 0"})
+2422:    | | |     "device_type" = <"dart-mapper">
+2433:    | | |     "device_type" = <"dart-mapper">
+2444:    | | |     "device_type" = <"dart-mapper">
+2455:    | | |     "device_type" = <"dart-mapper">
+2466:    | | |     "device_type" = <"dart-mapper">
+2477:    | | |     "device_type" = <"dart-mapper">
+2488:    | | |     "device_type" = <"dart-mapper">
+2499:    | | |     "device_type" = <"dart-mapper">
+2510:    | | |     "device_type" = <"dart-mapper">
+2521:    | | |     "device_type" = <"dart-mapper">
+2532:    | | |     "device_type" = <"dart-mapper">
+2543:    | | |     "device_type" = <"dart-mapper">
+2554:    | | |     "device_type" = <"dart-mapper">
+2565:    | | |     "device_type" = <"dart-mapper">
+2576:    | | |     "device_type" = <"dart-mapper">
+2587:    | | |     "device_type" = <"dart-mapper">
+2598:    | | |     "device_type" = <"dart-mapper">
+2609:    | | |     "device_type" = <"dart-mapper">
+2620:    | | |     "device_type" = <"dart-mapper">
+2631:    | | |     "device_type" = <"dart-mapper">
+2642:    | | |     "device_type" = <"dart-mapper">
+2653:    | | |     "device_type" = <"dart-mapper">
+2664:    | | |     "device_type" = <"dart-mapper">
+2675:    | |       "device_type" = <"dart-mapper">
+2790:    | |       "no-firmware-service" = <>
+2791:    | |       "reconfig-firmware" = <>
+2852:    | | |     "function-dart_force_active" = <7600000074636146>
+2855:    | | |     "function-dart_request_sid" = <7600000071655253>
+2861:    | | |     "function-dart_release_sid" = <760000006c655253>
+2863:    | | |     "function-dart_self" = <76000000666c6553>
+2877:    | |       "function-dart_release_sid" = <760000006c655253>
+2882:    | |       "function-dart_request_sid" = <7600000071655253>
+2886:    | |       "function-dart_force_active" = <7600000074636146>
+2914:    | |       "function-dart_self" = <76000000666c6553>
+2927:    | +-o dart-apciec1@21008000  <class AppleARMIODevice, id 0x1000002ad, registered, matched, active, busy 0 (260 ms), retain 9>
+2929:    | | |   "dart-id" = <03000000>
+2936:    | | |   "dart-options" = <37000000>
+2940:    | | |   "name" = <"dart-apciec1">
+2943:    | | |   "compatible" = <"dart,t8110">
+2950:    | | |   "dart-tunables-instance-0" = <0c02000004000000b701008000000000b70100800000000020020000040000000f0f0f00000000000f0f0f00000000002402000004000000ffffff000000000008080800000000000003000004000000311f00000000000001000000000000000803000004000000fcffff3f0000000000000010000000001003000004000000fcffff3f00000000fcffff3f000000001803000004000000311f00000000000001000000000000002003000004000000fcffff3f000000000000f001000000002803000004000000fcffff3f00000000fcbff00100000000>
+2954:    | | |   "device_type" = <"dart">
+2955:    | | |   "IOReportLegend" = ({"IOReportGroupName"="Interrupt Statistics (by index)","IOReportChannels"=((5291294645182005248,4295098369,"               First Level Interrupt Handler Count"),(5291294645182005249,4295098369,"              Second Level Interrupt Handler Count"),(5291294645182005250,4295098369,"        First Level Interrupt Handler Time (MATUs)"),(5291294645182005251,4295098369,"   Second Level Interrupt Handler CPU Time (MATUs)"),(5291294645182005252,4295098369,"Second Level Interrupt Handler System Time (MATUs)")),"IOReportChannelInfo"={"IOReportChannelUnit"=0},"IOReportSubGroupName"="dart-apciec1 0"})
+2962:    | |       "device_type" = <"dart-mapper">
+3005:    | |     "function-dart_force_active" = <7a00000074636146>
+3043:    | +-o dart-acio1@1A80000  <class AppleARMIODevice, id 0x1000002b1, registered, matched, active, busy 0 (269 ms), retain 32>
+3046:    | | |   "dart-id" = <04000000>
+3054:    | | |   "dart-options" = <07000000>
+3057:    | | |   "name" = <"dart-acio1">
+3060:    | | |   "compatible" = <"dart,t8110">
+3067:    | | |   "dart-tunables-instance-0" = <0c02000004000000b701008000000000b70100800000000020020000040000000f0f0f00000000000f0f0f00000000002402000004000000ffffff000000000008080800000000000003000004000000311f00000000000001000000000000000803000004000000fcffff3f0000000000000010000000001003000004000000fcffff3f00000000fcffff3f000000001803000004000000311f00000000000001000000000000002003000004000000fcffff3f000000000000f001000000002803000004000000fcffff3f00000000fcbff0010000000000080000040000003f000f0000000000000001000000000004080000040000003f000f0000000000020001000000000008080000040000003f000f000000000004000100000000000c080000040000003f000f0000000000060002000000000010080000040000003f000f00000000000a0002000000000014080000040000003f000f00000000000e0002000000000018080000040000003f000f000000000012000200000000001c080000040000003f000f0000000000160002000000000020080000040000003f000f00000000001a0002000000000024080000040000003f000f00000000001e0002000000000028080000040000003f000f000000000022000200000000002c080000040000003f000f0000000000260002000000000030080000040000003f000f00000000002a0002000000000034080000040000003f000f00000000002e0002000000000038080000040000003f000f000000000032000200000000003c080000040000003f000f00000000003600010000000000>
+3070:    | | |   "device_type" = <"dart">
+3071:    | | |   "IOReportLegend" = ({"IOReportGroupName"="Interrupt Statistics (by index)","IOReportChannels"=((5291294645182005248,4295098369,"               First Level Interrupt Handler Count"),(5291294645182005249,4295098369,"              Second Level Interrupt Handler Count"),(5291294645182005250,4295098369,"        First Level Interrupt Handler Time (MATUs)"),(5291294645182005251,4295098369,"   Second Level Interrupt Handler CPU Time (MATUs)"),(5291294645182005252,4295098369,"Second Level Interrupt Handler System Time (MATUs)")),"IOReportChannelInfo"={"IOReportChannelUnit"=0},"IOReportSubGroupName"="dart-acio1 0"})
+3082:    | | |     "device_type" = <"dart-mapper">
+3093:    | | |     "device_type" = <"dart-mapper">
+3104:    | | |     "device_type" = <"dart-mapper">
+3115:    | | |     "device_type" = <"dart-mapper">
+3126:    | | |     "device_type" = <"dart-mapper">
+3137:    | | |     "device_type" = <"dart-mapper">
+3148:    | | |     "device_type" = <"dart-mapper">
+3159:    | | |     "device_type" = <"dart-mapper">
+3170:    | | |     "device_type" = <"dart-mapper">
+3181:    | | |     "device_type" = <"dart-mapper">
+3192:    | | |     "device_type" = <"dart-mapper">
+3203:    | | |     "device_type" = <"dart-mapper">
+3214:    | | |     "device_type" = <"dart-mapper">
+3225:    | | |     "device_type" = <"dart-mapper">
+3236:    | | |     "device_type" = <"dart-mapper">
+3247:    | | |     "device_type" = <"dart-mapper">
+3258:    | | |     "device_type" = <"dart-mapper">
+3269:    | | |     "device_type" = <"dart-mapper">
+3280:    | | |     "device_type" = <"dart-mapper">
+3291:    | | |     "device_type" = <"dart-mapper">
+3302:    | | |     "device_type" = <"dart-mapper">
+3313:    | | |     "device_type" = <"dart-mapper">
+3324:    | | |     "device_type" = <"dart-mapper">
+3335:    | |       "device_type" = <"dart-mapper">
+3421:    | +-o display-crossbar0  <class AppleARMIODevice, id 0x1000002b7, registered, matched, active, busy 0 (32 ms), retain 8>
+3424:    | |     "compatible" = <"display-crossbar,t8112">
+3425:    | |     "ufp-endpoints" = <"dispext0","dispext1","dispext2","dispext3","scodec0">
+3426:    | |     "name" = <"display-crossbar0">
+3427:    | |     "dfp-endpoints" = <"atc0","atc1","atc2","atc3","lpdptx","dptx">
+3428:    | |     "device_type" = <"AAPL,display-crossbar">
+3746:    | |   |   "firmware-name" = <"mac15gaop">
+3876:    | +-o dart-aop@E4818000  <class AppleARMIODevice, id 0x1000002f5, registered, matched, active, busy 0 (196 ms), retain 11>
+3878:    | | |   "dart-id" = <05000000>
+3884:    | | |   "dart-options" = <25000000>
+3886:    | | |   "name" = <"dart-aop">
+3890:    | | |   "compatible" = <"dart,t8110">
+3896:    | | |   "dart-tunables-instance-0" = <0c02000004000000b701008000000000b7010080000000001802000004000000fcffff3f00000000d4402e000000000020020000040000000f0f0f00000000000f0f0f00000000002402000004000000ffffff000000000008080800000000000003000004000000311f00000000000001000000000000000803000004000000fcffff3f0000000000000010000000001003000004000000fcffff3f00000000fcffff3f000000001803000004000000311f00000000000001000000000000002003000004000000fcffff3f000000000000f001000000002803000004000000fcffff3f00000000fcbff0010000000000080000040000001f000f0000000000000004000000000004080000040000001f000f0000000000000004000000000008080000040000001f000f000000000000000400000000000c080000040000001f000f0000000000000004000000000010080000040000001f000f0000000000000004000000000014080000040000001f000f0000000000000004000000000018080000040000001f000f000000000000000400000000001c080000040000001f000f0000000000000004000000000020080000040000001f000f0000000000000004000000000024080000040000001f000f0000000000100004000000000028080000040000001f000f000000000010000400000000002c080000040000001f000f0000000000000000000000000030080000040000001f000f0000000000000000000000000034080000040000001f000f0000000000000000000000000038080000040000001f000f000000000000000400000000003c080000040000001f000f00000000000000000000000000>
+3899:    | | |   "device_type" = <"dart">
+3900:    | | |   "IOReportLegend" = ({"IOReportGroupName"="Interrupt Statistics (by index)","IOReportChannels"=((5291294645182005248,4295098369,"               First Level Interrupt Handler Count"),(5291294645182005249,4295098369,"              Second Level Interrupt Handler Count"),(5291294645182005250,4295098369,"        First Level Interrupt Handler Time (MATUs)"),(5291294645182005251,4295098369,"   Second Level Interrupt Handler CPU Time (MATUs)"),(5291294645182005252,4295098369,"Second Level Interrupt Handler System Time (MATUs)")),"IOReportChannelInfo"={"IOReportChannelUnit"=0},"IOReportSubGroupName"="dart-aop 0"})
+3907:    | | |     "device_type" = <"dart-mapper">
+3921:    | | |     "device_type" = <"dart-mapper">
+3926:    | |       "device_type" = <"dart-mapper">
+3992:    | | |   "disp-tvm" = <01000000>
+4211:    | |       "firmware-name" = <"t8122pmp">
+4243:    | +-o dart-pmp@C0300000  <class AppleARMIODevice, id 0x1000002fb, registered, matched, active, busy 0 (171 ms), retain 9>
+4245:    | | |   "dart-id" = <06000000>
+4252:    | | |   "dart-options" = <65000000>
+4255:    | | |   "name" = <"dart-pmp">
+4258:    | | |   "compatible" = <"dart,t8110">
+4266:    | | |   "dart-tunables-instance-0" = <0c02000004000000b701008000000000b70100800000000020020000040000000f0f0f00000000000f0f0f00000000002402000004000000ffffff000000000008080800000000000003000004000000311f00000000000001000000000000000803000004000000fcffff3f0000000000000010000000001003000004000000fcffff3f00000000fcffff3f000000001803000004000000311f00000000000001000000000000002003000004000000fcffff3f000000000000f001000000002803000004000000fcffff3f00000000fcbff00100000000>
+4269:    | | |   "device_type" = <"dart">
+4270:    | | |   "IOReportLegend" = ({"IOReportGroupName"="Interrupt Statistics (by index)","IOReportChannels"=((5291294645182005248,4295098369,"               First Level Interrupt Handler Count"),(5291294645182005249,4295098369,"              Second Level Interrupt Handler Count"),(5291294645182005250,4295098369,"        First Level Interrupt Handler Time (MATUs)"),(5291294645182005251,4295098369,"   Second Level Interrupt Handler CPU Time (MATUs)"),(5291294645182005252,4295098369,"Second Level Interrupt Handler System Time (MATUs)")),"IOReportChannelInfo"={"IOReportChannelUnit"=0},"IOReportSubGroupName"="dart-pmp 0"})
+4277:    | |       "device_type" = <"dart-mapper">
+4354:    | +-o dart-sep@8CAC0000  <class AppleARMIODevice, id 0x1000002fd, registered, matched, active, busy 0 (194 ms), retain 9>
+4356:    | | |   "dart-id" = <07000000>
+4362:    | | |   "dart-options" = <25000000>
+4364:    | | |   "name" = <"dart-sep">
+4368:    | | |   "compatible" = <"dart,t8110">
+4373:    | | |   "dart-tunables-instance-0" = <0c02000004000000b701008000000000b70100800000000020020000040000000f0f0f00000000000f0f0f00000000002402000004000000ffffff000000000008080800000000000003000004000000311f00000000000001000000000000000803000004000000fcffff3f0000000000000010000000001003000004000000fcffff3f00000000fcffff3f000000001803000004000000311f00000000000001000000000000002003000004000000fcffff3f000000000000f001000000002803000004000000fcffff3f00000000fcbff00100000000>
+4376:    | | |   "device_type" = <"dart">
+4377:    | | |   "IOReportLegend" = ({"IOReportGroupName"="Interrupt Statistics (by index)","IOReportChannels"=((5291294645182005248,4295098369,"               First Level Interrupt Handler Count"),(5291294645182005249,4295098369,"              Second Level Interrupt Handler Count"),(5291294645182005250,4295098369,"        First Level Interrupt Handler Time (MATUs)"),(5291294645182005251,4295098369,"   Second Level Interrupt Handler CPU Time (MATUs)"),(5291294645182005252,4295098369,"Second Level Interrupt Handler System Time (MATUs)")),"IOReportChannelInfo"={"IOReportChannelUnit"=0},"IOReportSubGroupName"="dart-sep 0"})
+4384:    | |       "device_type" = <"dart-mapper">
+4428:    | |   |   "no-firmware-service" = <>
+4443:    | +-o dart-sio@91004000  <class AppleARMIODevice, id 0x1000002ff, registered, matched, active, busy 0 (221 ms), retain 11>
+4445:    | | |   "dart-id" = <08000000>
+4451:    | | |   "dart-options" = <25000000>
+4453:    | | |   "name" = <"dart-sio">
+4456:    | | |   "compatible" = <"dart,t8110">
+4461:    | | |   "dart-tunables-instance-0" = <0c02000004000000b701008000000000b70100800000000020020000040000000f0f0f00000000000f0f0f00000000002402000004000000ffffff000000000008080800000000000003000004000000311f00000000000001000000000000000803000004000000fcffff3f0000000000000010000000001003000004000000fcffff3f00000000fcffff3f000000001803000004000000311f00000000000001000000000000002003000004000000fcffff3f000000000000f001000000002803000004000000fcffff3f00000000fcbff0010000000000080000040000003f000f0000000000000004000000000004080000040000003f000f0000000000100004000000000008080000040000003f000f000000000020000200000000000c080000040000003f000f0000000000240001000000000010080000040000003f000f0000000000000000000000000014080000040000003f000f0000000000000000000000000018080000040000003f000f000000000000000000000000001c080000040000003f000f0000000000000000000000000020080000040000003f000f0000000000000000000000000024080000040000003f000f0000000000000000000000000028080000040000003f000f000000000000000000000000002c080000040000003f000f0000000000000000000000000030080000040000003f000f0000000000000000000000000034080000040000003f000f0000000000000000000000000038080000040000003f000f000000000000000000000000003c080000040000003f000f000000000000000000000000003018000004000000ff000000000000004000000000000000>
+4464:    | | |   "device_type" = <"dart">
+4465:    | | |   "IOReportLegend" = ({"IOReportGroupName"="Interrupt Statistics (by index)","IOReportChannels"=((5291294645182005248,4295098369,"               First Level Interrupt Handler Count"),(5291294645182005249,4295098369,"              Second Level Interrupt Handler Count"),(5291294645182005250,4295098369,"        First Level Interrupt Handler Time (MATUs)"),(5291294645182005251,4295098369,"   Second Level Interrupt Handler CPU Time (MATUs)"),(5291294645182005252,4295098369,"Second Level Interrupt Handler System Time (MATUs)")),"IOReportChannelInfo"={"IOReportChannelUnit"=0},"IOReportSubGroupName"="dart-sio 0"})
+4477:    | | |     "device_type" = <"dart-mapper">
+4487:    | | |     "device_type" = <"dart-mapper">
+4497:    | |       "device_type" = <"dart-mapper">
+4817:    | |   |   "firmware-name" = <"t8122smc">
+5132:    | |       "no-firmware-service" = <>
+5140:    | +-o dart-mtp@EA808000  <class AppleARMIODevice, id 0x100000307, registered, matched, active, busy 0 (182 ms), retain 9>
+5142:    | | |   "dart-id" = <09000000>
+5149:    | | |   "dart-options" = <25000000>
+5151:    | | |   "name" = <"dart-mtp">
+5155:    | | |   "compatible" = <"dart,t8110">
+5161:    | | |   "dart-tunables-instance-0" = <0c02000004000000b701008000000000b7010080000000001802000004000000fcffff3f00000000d4402e000000000020020000040000000f0f0f00000000000f0f0f00000000002402000004000000ffffff000000000008080800000000000003000004000000311f00000000000001000000000000000803000004000000fcffff3f0000000000000010000000001003000004000000fcffff3f00000000fcffff3f000000001803000004000000311f00000000000001000000000000002003000004000000fcffff3f000000000000f001000000002803000004000000fcffff3f00000000fcbff00100000000>
+5164:    | | |   "device_type" = <"dart">
+5165:    | | |   "IOReportLegend" = ({"IOReportGroupName"="Interrupt Statistics (by index)","IOReportChannels"=((5291294645182005248,4295098369,"               First Level Interrupt Handler Count"),(5291294645182005249,4295098369,"              Second Level Interrupt Handler Count"),(5291294645182005250,4295098369,"        First Level Interrupt Handler Time (MATUs)"),(5291294645182005251,4295098369,"   Second Level Interrupt Handler CPU Time (MATUs)"),(5291294645182005252,4295098369,"Second Level Interrupt Handler System Time (MATUs)")),"IOReportChannelInfo"={"IOReportChannelUnit"=0},"IOReportSubGroupName"="dart-mtp 0"})
+5172:    | |       "device_type" = <"dart-mapper">
+5221:    | |   +-o firmware@0  <class AppleARMNORFlashDevice, id 0x1000004d0, registered, matched, active, busy 0 (28 ms), retain 8>
+5223:    | |   |     "device_type" = <"firmware">
+5226:    | |   |     "name" = <"firmware">
+5442:    | +-o dart-usb0@2F00000  <class AppleARMIODevice, id 0x10000030e, registered, matched, active, busy 0 (170 ms), retain 9>
+5444:    | | |   "dart-id" = <0a000000>
+5451:    | | |   "dart-tunables-instance-1" = <0c02000004000000b701008000000000b70100800000000020020000040000000f0f0f00000000000f0f0f00000000002402000004000000ffffff000000000008080800000000000003000004000000311f00000000000001000000000000000803000004000000fcffff3f0000000000000010000000001003000004000000fcffff3f00000000fcffff3f000000001803000004000000311f00000000000001000000000000002003000004000000fcffff3f000000000000f001000000002803000004000000fcffff3f00000000fcbff00100000000>
+5453:    | | |   "dart-options" = <27000000>
+5456:    | | |   "name" = <"dart-usb0">
+5459:    | | |   "compatible" = <"dart,t8110">
+5464:    | | |   "dart-tunables-instance-0" = <0c02000004000000b701008000000000b70100800000000020020000040000000f0f0f00000000000f0f0f00000000002402000004000000ffffff000000000008080800000000000003000004000000311f00000000000001000000000000000803000004000000fcffff3f0000000000000010000000001003000004000000fcffff3f00000000fcffff3f000000001803000004000000311f00000000000001000000000000002003000004000000fcffff3f000000000000f001000000002803000004000000fcffff3f00000000fcbff00100000000>
+5467:    | | |   "device_type" = <"dart">
+5468:    | | |   "IOReportLegend" = ({"IOReportGroupName"="Interrupt Statistics (by index)","IOReportChannels"=((5291294645182005248,4295098369,"               First Level Interrupt Handler Count"),(5291294645182005249,4295098369,"              Second Level Interrupt Handler Count"),(5291294645182005250,4295098369,"        First Level Interrupt Handler Time (MATUs)"),(5291294645182005251,4295098369,"   Second Level Interrupt Handler CPU Time (MATUs)"),(5291294645182005252,4295098369,"Second Level Interrupt Handler System Time (MATUs)")),"IOReportChannelInfo"={"IOReportChannelUnit"=0},"IOReportSubGroupName"="dart-usb0 0"})
+5480:    | |       "device_type" = <"dart-mapper">
+5637:    | +-o dart-usb1@2F00000  <class AppleARMIODevice, id 0x100000311, registered, matched, active, busy 0 (182 ms), retain 9>
+5639:    | | |   "dart-id" = <0b000000>
+5646:    | | |   "dart-tunables-instance-1" = <0c02000004000000b701008000000000b70100800000000020020000040000000f0f0f00000000000f0f0f00000000002402000004000000ffffff000000000008080800000000000003000004000000311f00000000000001000000000000000803000004000000fcffff3f0000000000000010000000001003000004000000fcffff3f00000000fcffff3f000000001803000004000000311f00000000000001000000000000002003000004000000fcffff3f000000000000f001000000002803000004000000fcffff3f00000000fcbff00100000000>
+5648:    | | |   "dart-options" = <27000000>
+5651:    | | |   "name" = <"dart-usb1">
+5654:    | | |   "compatible" = <"dart,t8110">
+5659:    | | |   "dart-tunables-instance-0" = <0c02000004000000b701008000000000b70100800000000020020000040000000f0f0f00000000000f0f0f00000000002402000004000000ffffff000000000008080800000000000003000004000000311f00000000000001000000000000000803000004000000fcffff3f0000000000000010000000001003000004000000fcffff3f00000000fcffff3f000000001803000004000000311f00000000000001000000000000002003000004000000fcffff3f000000000000f001000000002803000004000000fcffff3f00000000fcbff00100000000>
+5662:    | | |   "device_type" = <"dart">
+5663:    | | |   "IOReportLegend" = ({"IOReportGroupName"="Interrupt Statistics (by index)","IOReportChannels"=((5291294645182005248,4295098369,"               First Level Interrupt Handler Count"),(5291294645182005249,4295098369,"              Second Level Interrupt Handler Count"),(5291294645182005250,4295098369,"        First Level Interrupt Handler Time (MATUs)"),(5291294645182005251,4295098369,"   Second Level Interrupt Handler CPU Time (MATUs)"),(5291294645182005252,4295098369,"Second Level Interrupt Handler System Time (MATUs)")),"IOReportChannelInfo"={"IOReportChannelUnit"=0},"IOReportSubGroupName"="dart-usb1 0"})
+5675:    | |       "device_type" = <"dart-mapper">
+6197:    | +-o disp0@7C000000  <class AppleARMIODevice, id 0x100000319, registered, matched, active, busy 0 (293 ms), retain 9>
+6205:    | |     "display-default-color" = <00000000>
+6208:    | |     "display-timing-info" = <0004000032000000330000003200000058020000da0000000600000032000000>
+6214:    | |     "name" = <"disp0">
+6217:    | |     "compatible" = <"disp0,t8122">
+6222:    | |     "device_type" = <"display-subsystem">
+6228:    | +-o dcp0-expert  <class AppleARMIODevice, id 0x10000031a, registered, matched, active, busy 0 (228 ms), retain 8>
+6230:    | |     "compatible" = <"dcp-expert-v1">
+6231:    | |     "device_type" = <"dcp-expert">
+6233:    | |     "name" = <"dcp0-expert">
+6238:    | +-o dcp@7EC00000  <class AppleARMIODevice, id 0x10000031b, registered, matched, active, busy 0 (734 ms), retain 9>
+6241:    | | |   "hdcp-channels" = <0500000006000000>
+6250:    | | |   "name" = <"dcp">
+6255:    | | |   "hdcp-parent" = <bc000000>
+6261:    | | |   "IOReportLegend" = ({"IOReportGroupName"="Interrupt Statistics (by index)","IOReportChannels"=((5291294645182136320,4295098369,"               First Level Interrupt Handler Count"),(5291294645182136321,4295098369,"              Second Level Interrupt Handler Count"),(5291294645182136322,4295098369,"        First Level Interrupt Handler Time (MATUs)"),(5291294645182136323,4295098369,"   Second Level Interrupt Handler CPU Time (MATUs)"),(5291294645182136324,4295098369,"Second Level Interrupt Handler System Time (MATUs)")),"IOReportChannelInfo"={"IOReportChannelUnit"=0},"IOReportSubGroupName"="dcp 2"},{"IOReportGroupName"="Interrupt Statistics (by index)","IOReportChannels"=((5291294645182070784,4295098369,"               First Level Interrupt Handler Count"),(5291294645182070785,4295098369,"              Second Level Interrupt Handler Count"),(5291294645182070786,4295098369,"        First Level Interrupt Handler Time (MATUs)"),(5291294645182070787,4295098369,"   Second Level Interrupt Handler CPU Time (MATUs)"),(5291294645182070788,4295098369,"Second Level Interrupt Handler System Time (MATUs)")),"IOReportChannelInfo"={"IOReportChannelUnit"=0},"IOReportSubGroupName"="dcp 1"})
+6262:    | | |   "device_type" = <"dcp">
+6267:    | | +-o iop-dcp-nub  <class AppleA7IOPNub, id 0x100000486, registered, matched, active, busy 0 (560 ms), retain 7>
+6278:    | |       "no-firmware-service" = <>
+6282:    | |       "name" = <"iop-dcp-nub">
+6286:    | +-o dart-dcp@7D30C000  <class AppleARMIODevice, id 0x10000031c, registered, matched, active, busy 0 (179 ms), retain 9>
+6288:    | | |   "dart-id" = <0c000000>
+6291:    | | |   "IOReportLegend" = ({"IOReportGroupName"="Interrupt Statistics (by index)","IOReportChannels"=((5291294645182005248,4295098369,"               First Level Interrupt Handler Count"),(5291294645182005249,4295098369,"              Second Level Interrupt Handler Count"),(5291294645182005250,4295098369,"        First Level Interrupt Handler Time (MATUs)"),(5291294645182005251,4295098369,"   Second Level Interrupt Handler CPU Time (MATUs)"),(5291294645182005252,4295098369,"Second Level Interrupt Handler System Time (MATUs)")),"IOReportChannelInfo"={"IOReportChannelUnit"=0},"IOReportSubGroupName"="dart-dcp 0"})
+6296:    | | |   "dart-options" = <65000000>
+6299:    | | |   "name" = <"dart-dcp">
+6303:    | | |   "compatible" = <"dart,t8110">
+6310:    | | |   "dart-tunables-instance-0" = <0c02000004000000b701008000000000b70100800000000020020000040000000f0f0f00000000000f0f0f00000000002402000004000000ffffff000000000008080800000000000003000004000000311f00000000000001000000000000000803000004000000fcffff3f0000000000000010000000001003000004000000fcffff3f00000000fcffff3f000000001803000004000000311f00000000000001000000000000002003000004000000fcffff3f000000000000f001000000002803000004000000fcffff3f00000000fcbff00100000000>
+6314:    | | |   "device_type" = <"dart">
+6320:    | | +-o mapper-dcp@5  <class IODARTMapperNub, id 0x10000040e, registered, matched, active, busy 0 (23 ms), retain 8>
+6322:    | |       "name" = <"mapper-dcp">
+6326:    | |       "device_type" = <"dart-mapper">
+6331:    | +-o dart-disp0@7D304000  <class AppleARMIODevice, id 0x10000031d, registered, matched, active, busy 0 (186 ms), retain 10>
+6346:    | | |   "dart-id" = <0d000000>
+6354:    | | |   "name" = <"dart-disp0">
+6356:    | | |   "device_type" = <"dart">
+6357:    | | |   "compatible" = <"dart,t8110">
+6358:    | | |   "dart-options" = <65000000>
+6363:    | | |   "dart-tunables-instance-0" = <0c02000004000000b701008000000000b70100800000000020020000040000000f0f0f00000000000f0f0f00000000002402000004000000ffffff000000000008080800000000000003000004000000311f00000000000001000000000000000803000004000000fcffff3f0000000000000010000000001003000004000000fcffff3f00000000fcffff3f000000001803000004000000311f00000000000001000000000000002003000004000000fcffff3f000000000000f001000000002803000004000000fcffff3f00000000fcbff00100000000>
+6364:    | | |   "IOReportLegend" = ({"IOReportGroupName"="Interrupt Statistics (by index)","IOReportChannels"=((5291294645182005248,4295098369,"               First Level Interrupt Handler Count"),(5291294645182005249,4295098369,"              Second Level Interrupt Handler Count"),(5291294645182005250,4295098369,"        First Level Interrupt Handler Time (MATUs)"),(5291294645182005251,4295098369,"   Second Level Interrupt Handler CPU Time (MATUs)"),(5291294645182005252,4295098369,"Second Level Interrupt Handler System Time (MATUs)")),"IOReportChannelInfo"={"IOReportChannelUnit"=0},"IOReportSubGroupName"="dart-disp0 0"})
+6370:    | | +-o mapper-disp0@0  <class IODARTMapperNub, id 0x100000418, registered, matched, active, busy 0 (26 ms), retain 8>
+6372:    | | |     "name" = <"mapper-disp0">
+6376:    | | |     "device_type" = <"dart-mapper">
+6381:    | | +-o mapper-disp0-piodma@4  <class IODARTMapperNub, id 0x100000419, registered, matched, active, busy 0 (33 ms), retain 8>
+6383:    | |       "name" = <"mapper-disp0-piodma">
+6387:    | |       "device_type" = <"dart-mapper">
+6392:    | +-o dcp-sac-controller  <class AppleARMIODevice, id 0x10000031e, registered, matched, active, busy 0 (43 ms), retain 8>
+6394:    | |     "device_type" = <"dcp-sac-controller">
+6399:    | |     "name" = <"dcp-sac-controller">
+6414:    | +-o dispext0@8000000  <class AppleARMIODevice, id 0x100000320, registered, matched, active, busy 0 (276 ms), retain 9>
+6421:    | |     "display-default-color" = <00000000>
+6423:    | |     "display-timing-info" = <0004000032000000330000003200000058020000da0000000600000032000000>
+6427:    | |     "name" = <"dispext0">
+6429:    | |     "compatible" = <"dispext0,t8122">
+6434:    | |     "device_type" = <"ext-display-subsystem">
+6439:    | +-o dcpext-expert  <class AppleARMIODevice, id 0x100000321, registered, matched, active, busy 0 (226 ms), retain 8>
+6441:    | |     "compatible" = <"dcp-expert-v1">
+6442:    | |     "device_type" = <"dcp-expert">
+6444:    | |     "name" = <"dcpext-expert">
+6449:    | +-o dcpext@AC00000  <class AppleARMIODevice, id 0x100000322, registered, matched, active, busy 0 (749 ms), retain 9>
+6452:    | | |   "hdcp-channels" = <0700000008000000>
+6461:    | | |   "name" = <"dcpext">
+6466:    | | |   "hdcp-parent" = <bc000000>
+6472:    | | |   "IOReportLegend" = ({"IOReportGroupName"="Interrupt Statistics (by index)","IOReportChannels"=((5291294645182136320,4295098369,"               First Level Interrupt Handler Count"),(5291294645182136321,4295098369,"              Second Level Interrupt Handler Count"),(5291294645182136322,4295098369,"        First Level Interrupt Handler Time (MATUs)"),(5291294645182136323,4295098369,"   Second Level Interrupt Handler CPU Time (MATUs)"),(5291294645182136324,4295098369,"Second Level Interrupt Handler System Time (MATUs)")),"IOReportChannelInfo"={"IOReportChannelUnit"=0},"IOReportSubGroupName"="dcpext 2"},{"IOReportGroupName"="Interrupt Statistics (by index)","IOReportChannels"=((5291294645182070784,4295098369,"               First Level Interrupt Handler Count"),(5291294645182070785,4295098369,"              Second Level Interrupt Handler Count"),(5291294645182070786,4295098369,"        First Level Interrupt Handler Time (MATUs)"),(5291294645182070787,4295098369,"   Second Level Interrupt Handler CPU Time (MATUs)"),(5291294645182070788,4295098369,"Second Level Interrupt Handler System Time (MATUs)")),"IOReportChannelInfo"={"IOReportChannelUnit"=0},"IOReportSubGroupName"="dcpext 1"})
+6473:    | | |   "device_type" = <"dcp">
+6478:    | | +-o iop-dcpext-nub  <class AppleA7IOPNub, id 0x100000593, registered, matched, active, busy 0 (529 ms), retain 7>
+6489:    | |       "no-firmware-service" = <>
+6494:    | |       "name" = <"iop-dcpext-nub">
+6498:    | +-o dart-dcpext@930C000  <class AppleARMIODevice, id 0x100000323, registered, matched, active, busy 0 (219 ms), retain 9>
+6500:    | | |   "dart-id" = <0e000000>
+6503:    | | |   "IOReportLegend" = ({"IOReportGroupName"="Interrupt Statistics (by index)","IOReportChannels"=((5291294645182005248,4295098369,"               First Level Interrupt Handler Count"),(5291294645182005249,4295098369,"              Second Level Interrupt Handler Count"),(5291294645182005250,4295098369,"        First Level Interrupt Handler Time (MATUs)"),(5291294645182005251,4295098369,"   Second Level Interrupt Handler CPU Time (MATUs)"),(5291294645182005252,4295098369,"Second Level Interrupt Handler System Time (MATUs)")),"IOReportChannelInfo"={"IOReportChannelUnit"=0},"IOReportSubGroupName"="dart-dcpext 0"})
+6508:    | | |   "dart-options" = <65000000>
+6511:    | | |   "name" = <"dart-dcpext">
+6515:    | | |   "compatible" = <"dart,t8110">
+6525:    | | |   "device_type" = <"dart">
+6531:    | | +-o mapper-dcpext@5  <class IODARTMapperNub, id 0x100000498, registered, matched, active, busy 0 (43 ms), retain 8>
+6533:    | |       "name" = <"mapper-dcpext">
+6537:    | |       "device_type" = <"dart-mapper">
+6542:    | +-o dart-dispext0@9304000  <class AppleARMIODevice, id 0x100000324, registered, matched, active, busy 0 (170 ms), retain 10>
+6557:    | | |   "dart-id" = <0f000000>
+6565:    | | |   "name" = <"dart-dispext0">
+6567:    | | |   "device_type" = <"dart">
+6568:    | | |   "compatible" = <"dart,t8110">
+6569:    | | |   "dart-options" = <65000000>
+6574:    | | |   "IOReportLegend" = ({"IOReportGroupName"="Interrupt Statistics (by index)","IOReportChannels"=((5291294645182005248,4295098369,"               First Level Interrupt Handler Count"),(5291294645182005249,4295098369,"              Second Level Interrupt Handler Count"),(5291294645182005250,4295098369,"        First Level Interrupt Handler Time (MATUs)"),(5291294645182005251,4295098369,"   Second Level Interrupt Handler CPU Time (MATUs)"),(5291294645182005252,4295098369,"Second Level Interrupt Handler System Time (MATUs)")),"IOReportChannelInfo"={"IOReportChannelUnit"=0},"IOReportSubGroupName"="dart-dispext0 0"})
+6580:    | | +-o mapper-dispext0@0  <class IODARTMapperNub, id 0x100000432, registered, matched, active, busy 0 (7 ms), retain 8>
+6582:    | | |     "name" = <"mapper-dispext0">
+6586:    | | |     "device_type" = <"dart-mapper">
+6591:    | | +-o mapper-dispext0-piodma@4  <class IODARTMapperNub, id 0x100000433, registered, matched, active, busy 0 (11 ms), retain 8>
+6593:    | |       "name" = <"mapper-dispext0-piodma">
+6597:    | |       "device_type" = <"dart-mapper">
+6640:    | +-o dart-scaler@D200000  <class AppleARMIODevice, id 0x100000327, registered, matched, active, busy 0 (215 ms), retain 10>
+6642:    | | |   "dart-id" = <10000000>
+6648:    | | |   "dart-options" = <25000000>
+6650:    | | |   "name" = <"dart-scaler">
+6653:    | | |   "compatible" = <"dart,t8110">
+6659:    | | |   "dart-tunables-instance-0" = <0c02000004000000b701008000000000b70100800000000020020000040000000f0f0f00000000000f0f0f00000000002402000004000000ffffff0000000000080808000000000028020000040000003f00003f000000000a00000a000000002c02000004000000000700000000000000010000000000000003000004000000311f00000000000001000000000000000803000004000000fcffff3f0000000000000010000000001003000004000000fcffff3f00000000fcffff3f000000001803000004000000311f00000000000001000000000000002003000004000000fcffff3f000000000000f001000000002803000004000000fcffff3f00000000fcbff0010000000000080000040000003f000f000000000000000f000000000004080000040000003f000f000000000000000f000000000008080000040000003f000f000000000000000f00000000000c080000040000003f000f000000000000000f000000000010080000040000003f000f000000000000000f000000000014080000040000003f000f000000000000000f000000000018080000040000003f000f000000000000000f00000000001c080000040000003f000f000000000000000f000000000020080000040000003f000f000000000000000f000000000024080000040000003f000f000000000000000f000000000028080000040000003f000f000000000000000f00000000002c080000040000003f000f000000000000000f000000000030080000040000003f000f000000000000000f000000000034080000040000003f000f000000000000000f000000000038080000040000003f000f000000000000000f00000000003c080000040000003f000f000000000000000f0000000000>
+6662:    | | |   "device_type" = <"dart">
+6663:    | | |   "IOReportLegend" = ({"IOReportGroupName"="Interrupt Statistics (by index)","IOReportChannels"=((5291294645182005248,4295098369,"               First Level Interrupt Handler Count"),(5291294645182005249,4295098369,"              Second Level Interrupt Handler Count"),(5291294645182005250,4295098369,"        First Level Interrupt Handler Time (MATUs)"),(5291294645182005251,4295098369,"   Second Level Interrupt Handler CPU Time (MATUs)"),(5291294645182005252,4295098369,"Second Level Interrupt Handler System Time (MATUs)")),"IOReportChannelInfo"={"IOReportChannelUnit"=0},"IOReportSubGroupName"="dart-scaler 0"})
+6674:    | | |     "device_type" = <"dart-mapper">
+6685:    | |       "device_type" = <"dart-mapper">
+6712:    | +-o dart-jpeg0@89004000  <class AppleARMIODevice, id 0x100000329, registered, matched, active, busy 0 (200 ms), retain 9>
+6714:    | | |   "dart-id" = <11000000>
+6720:    | | |   "dart-options" = <25000000>
+6722:    | | |   "name" = <"dart-jpeg0">
+6725:    | | |   "compatible" = <"dart,t8110">
+6730:    | | |   "dart-tunables-instance-0" = <0c02000004000000b701008000000000b70100800000000020020000040000000f0f0f00000000000f0f0f00000000002402000004000000ffffff000000000008080800000000000003000004000000311f00000000000001000000000000000803000004000000fcffff3f0000000000000010000000001003000004000000fcffff3f00000000fcffff3f000000001803000004000000311f00000000000001000000000000002003000004000000fcffff3f000000000000f001000000002803000004000000fcffff3f00000000fcbff00100000000>
+6733:    | | |   "device_type" = <"dart">
+6734:    | | |   "IOReportLegend" = ({"IOReportGroupName"="Interrupt Statistics (by index)","IOReportChannels"=((5291294645182005248,4295098369,"               First Level Interrupt Handler Count"),(5291294645182005249,4295098369,"              Second Level Interrupt Handler Count"),(5291294645182005250,4295098369,"        First Level Interrupt Handler Time (MATUs)"),(5291294645182005251,4295098369,"   Second Level Interrupt Handler CPU Time (MATUs)"),(5291294645182005252,4295098369,"Second Level Interrupt Handler System Time (MATUs)")),"IOReportChannelInfo"={"IOReportChannelUnit"=0},"IOReportSubGroupName"="dart-jpeg0 0"})
+6741:    | |       "device_type" = <"dart-mapper">
+6770:    | +-o dart-jpeg1@8900C000  <class AppleARMIODevice, id 0x10000032b, registered, matched, active, busy 0 (180 ms), retain 9>
+6772:    | | |   "dart-id" = <12000000>
+6778:    | | |   "dart-options" = <25000000>
+6780:    | | |   "name" = <"dart-jpeg1">
+6783:    | | |   "compatible" = <"dart,t8110">
+6788:    | | |   "dart-tunables-instance-0" = <0c02000004000000b701008000000000b70100800000000020020000040000000f0f0f00000000000f0f0f00000000002402000004000000ffffff000000000008080800000000000003000004000000311f00000000000001000000000000000803000004000000fcffff3f0000000000000010000000001003000004000000fcffff3f00000000fcffff3f000000001803000004000000311f00000000000001000000000000002003000004000000fcffff3f000000000000f001000000002803000004000000fcffff3f00000000fcbff00100000000>
+6791:    | | |   "device_type" = <"dart">
+6792:    | | |   "IOReportLegend" = ({"IOReportGroupName"="Interrupt Statistics (by index)","IOReportChannels"=((5291294645182005248,4295098369,"               First Level Interrupt Handler Count"),(5291294645182005249,4295098369,"              Second Level Interrupt Handler Count"),(5291294645182005250,4295098369,"        First Level Interrupt Handler Time (MATUs)"),(5291294645182005251,4295098369,"   Second Level Interrupt Handler CPU Time (MATUs)"),(5291294645182005252,4295098369,"Second Level Interrupt Handler System Time (MATUs)")),"IOReportChannelInfo"={"IOReportChannelUnit"=0},"IOReportSubGroupName"="dart-jpeg1 0"})
+6799:    | |       "device_type" = <"dart-mapper">
+6833:    | +-o dart-ave@5030000  <class AppleARMIODevice, id 0x10000032d, registered, matched, active, busy 0 (213 ms), retain 9>
+6835:    | | |   "dart-id" = <13000000>
+6841:    | | |   "dart-tunables-instance-1" = <0c02000004000000b701008000000000b70100800000000020020000040000000f0f0f00000000000f0f0f00000000002402000004000000ffffff000000000008080800000000000003000004000000311f00000000000001000000000000000803000004000000fcffff3f0000000000000010000000001003000004000000fcffff3f00000000fcffff3f000000001803000004000000311f00000000000001000000000000002003000004000000fcffff3f000000000000f001000000002803000004000000fcffff3f00000000fcbff00100000000>
+6843:    | | |   "dart-options" = <25000000>
+6847:    | | |   "name" = <"dart-ave">
+6850:    | | |   "compatible" = <"dart,t8110">
+6855:    | | |   "dart-tunables-instance-0" = <0c02000004000000b701008000000000b70100800000000020020000040000000f0f0f00000000000f0f0f00000000002402000004000000ffffff00000000000808080000000000280200000400000000003f000000000000000a00000000000003000004000000311f00000000000001000000000000000803000004000000fcffff3f0000000000000010000000001003000004000000fcffff3f00000000fcffff3f000000001803000004000000311f00000000000001000000000000002003000004000000fcffff3f000000000000f001000000002803000004000000fcffff3f00000000fcbff0010000000000080000040000003f000f0000000000000003000000000004080000040000003f000f0000000000080002000000000008080000040000003f000f00000000000c000200000000000c080000040000003f000f0000000000100002000000000010080000040000003f000f0000000000140000000000000014080000040000003f000f0000000000150002000000000018080000040000003f000f000000000019000200000000001c080000040000003f000f00000000001d0000000000000020080000040000003f000f00000000001e0004000000000024080000040000003f000f00000000002e0003000000000028080000040000003f000f000000000036000200000000002c080000040000003f000f00000000003a0000000000000030080000040000003f000f00000000003b0001000000000034080000040000003f000f00000000003d0000000000000038080000040000003f000f00000000003e000100000000003c080000040000003f000f00000000003e00010000000000>
+6858:    | | |   "device_type" = <"dart">
+6859:    | | |   "IOReportLegend" = ({"IOReportGroupName"="Interrupt Statistics (by index)","IOReportChannels"=((5291294645182005248,4295098369,"               First Level Interrupt Handler Count"),(5291294645182005249,4295098369,"              Second Level Interrupt Handler Count"),(5291294645182005250,4295098369,"        First Level Interrupt Handler Time (MATUs)"),(5291294645182005251,4295098369,"   Second Level Interrupt Handler CPU Time (MATUs)"),(5291294645182005252,4295098369,"Second Level Interrupt Handler System Time (MATUs)")),"IOReportChannelInfo"={"IOReportChannelUnit"=0},"IOReportSubGroupName"="dart-ave 0"})
+6870:    | |       "device_type" = <"dart-mapper">
+6902:    | +-o dart-avd@79010000  <class AppleARMIODevice, id 0x10000032f, registered, matched, active, busy 0 (179 ms), retain 11>
+6904:    | | |   "dart-id" = <14000000>
+6910:    | | |   "dart-options" = <25000000>
+6913:    | | |   "name" = <"dart-avd">
+6916:    | | |   "compatible" = <"dart,t8110">
+6921:    | | |   "dart-tunables-instance-0" = <0c02000004000000b701008000000000b70100800000000020020000040000000f0f0f00000000000f0f0f00000000002402000004000000ffffff000000000008080800000000000003000004000000311f00000000000001000000000000000803000004000000fcffff3f0000000000000010000000001003000004000000fcffff3f00000000fcffff3f000000001803000004000000311f00000000000001000000000000002003000004000000fcffff3f000000000000f001000000002803000004000000fcffff3f00000000fcbff0010000000000080000040000003f000f0000000000000001000000000004080000040000003f000f0000000000020003000000000008080000040000003f000f00000000000a000400000000000c080000040000003f000f00000000001a0002000000000010080000040000003f000f00000000001e0003000000000014080000040000003f000f0000000000260004000000000018080000040000003f000f000000000000000000000000001c080000040000003f000f0000000000000000000000000020080000040000003f000f0000000000000000000000000024080000040000003f000f0000000000000000000000000028080000040000003f000f000000000000000000000000002c080000040000003f000f0000000000000000000000000030080000040000003f000f0000000000000000000000000034080000040000003f000f0000000000000000000000000038080000040000003f000f000000000000000000000000003c080000040000003f000f00000000000000000000000000>
+6924:    | | |   "device_type" = <"dart">
+6925:    | | |   "IOReportLegend" = ({"IOReportGroupName"="Interrupt Statistics (by index)","IOReportChannels"=((5291294645182005248,4295098369,"               First Level Interrupt Handler Count"),(5291294645182005249,4295098369,"              Second Level Interrupt Handler Count"),(5291294645182005250,4295098369,"        First Level Interrupt Handler Time (MATUs)"),(5291294645182005251,4295098369,"   Second Level Interrupt Handler CPU Time (MATUs)"),(5291294645182005252,4295098369,"Second Level Interrupt Handler System Time (MATUs)")),"IOReportChannelInfo"={"IOReportChannelUnit"=0},"IOReportSubGroupName"="dart-avd 0"})
+6936:    | | |     "device_type" = <"dart-mapper">
+6947:    | | |     "device_type" = <"dart-mapper">
+6958:    | |       "device_type" = <"dart-mapper">
+6983:    | +-o dart-apr@11028000  <class AppleARMIODevice, id 0x100000331, registered, matched, active, busy 0 (175 ms), retain 9>
+6985:    | | |   "dart-id" = <15000000>
+6990:    | | |   "dart-tunables-instance-1" = <0c02000004000000b701008000000000b70100800000000020020000040000000f0f0f00000000000f0f0f00000000002402000004000000ffffff000000000008080800000000000003000004000000311f00000000000001000000000000000803000004000000fcffff3f0000000000000010000000001003000004000000fcffff3f00000000fcffff3f000000001803000004000000311f00000000000001000000000000002003000004000000fcffff3f000000000000f001000000002803000004000000fcffff3f00000000fcbff00100000000>
+6992:    | | |   "dart-options" = <25000000>
+6996:    | | |   "name" = <"dart-apr">
+6999:    | | |   "compatible" = <"dart,t8110">
+7004:    | | |   "dart-tunables-instance-0" = <0c02000004000000b701008000000000b70100800000000020020000040000000f0f0f00000000000f0f0f00000000002402000004000000ffffff000000000008080800000000000003000004000000311f00000000000001000000000000000803000004000000fcffff3f0000000000000010000000001003000004000000fcffff3f00000000fcffff3f000000001803000004000000311f00000000000001000000000000002003000004000000fcffff3f000000000000f001000000002803000004000000fcffff3f00000000fcbff0010000000000080000040000007f000f0000000000000004000000000004080000040000007f000f0000000000100004000000000008080000040000007f000f000000000020000300000000000c080000040000007f000f0000000000280003000000000010080000040000007f000f0000000000300002000000000014080000040000007f000f0000000000340002000000000018080000040000007f000f000000000038000100000000001c080000040000007f000f00000000003a0001000000000020080000040000007f000f00000000003c0001000000000024080000040000007f000f00000000003e0001000000000028080000040000007f000f000000000040000100000000002c080000040000007f000f0000000000420001000000000030080000040000007f000f0000000000420001000000000034080000040000007f000f0000000000420001000000000038080000040000007f000f000000000042000100000000003c080000040000007f000f00000000004200010000000000>
+7007:    | | |   "device_type" = <"dart">
+7008:    | | |   "IOReportLegend" = ({"IOReportGroupName"="Interrupt Statistics (by index)","IOReportChannels"=((5291294645182005248,4295098369,"               First Level Interrupt Handler Count"),(5291294645182005249,4295098369,"              Second Level Interrupt Handler Count"),(5291294645182005250,4295098369,"        First Level Interrupt Handler Time (MATUs)"),(5291294645182005251,4295098369,"   Second Level Interrupt Handler CPU Time (MATUs)"),(5291294645182005252,4295098369,"Second Level Interrupt Handler System Time (MATUs)")),"IOReportChannelInfo"={"IOReportChannelUnit"=0},"IOReportSubGroupName"="dart-apr 0"})
+7019:    | |       "device_type" = <"dart-mapper">
+7031:    | |     "no-firmware-service" = <>
+7079:    | +-o dart-isp@964A8000  <class AppleARMIODevice, id 0x100000333, registered, matched, active, busy 0 (187 ms), retain 9>
+7081:    | | |   "dart-id" = <16000000>
+7087:    | | |   "dart-tunables-instance-1" = <0c02000004000000b701008000000000b70100800000000020020000040000000f0f0f00000000000f0f0f00000000002402000004000000ffffff000000000008080800000000000003000004000000311f00000000000001000000000000000803000004000000fcffff3f0000000000000010000000001003000004000000fcffff3f00000000fcffff3f000000001803000004000000311f00000000000001000000000000002003000004000000fcffff3f000000000000f001000000002803000004000000fcffff3f00000000fcbff00100000000>
+7089:    | | |   "dart-options" = <25000000>
+7091:    | | |   "name" = <"dart-isp">
+7094:    | | |   "compatible" = <"dart,t8110">
+7102:    | | |   "dart-tunables-instance-0" = <0c02000004000000b701008000000000b70100800000000020020000040000000f0f0f00000000000f0f0f00000000002402000004000000ffffff000000000008080800000000000003000004000000311f00000000000001000000000000000803000004000000fcffff3f0000000000000010000000001003000004000000fcffff3f00000000fcffff3f000000001803000004000000311f00000000000001000000000000002003000004000000fcffff3f000000000000f001000000002803000004000000fcffff3f00000000fcbff00100000000>
+7104:    | | |   "dart-tunables-instance-2" = <0c02000004000000b701008000000000b70100800000000020020000040000000f0f0f00000000000f0f0f00000000002402000004000000ffffff000000000008080800000000000003000004000000311f00000000000001000000000000000803000004000000fcffff3f0000000000000010000000001003000004000000fcffff3f00000000fcffff3f000000001803000004000000311f00000000000001000000000000002003000004000000fcffff3f000000000000f001000000002803000004000000fcffff3f00000000fcbff00100000000>
+7106:    | | |   "device_type" = <"dart">
+7107:    | | |   "IOReportLegend" = ({"IOReportGroupName"="Interrupt Statistics (by index)","IOReportChannels"=((5291294645182005248,4295098369,"               First Level Interrupt Handler Count"),(5291294645182005249,4295098369,"              Second Level Interrupt Handler Count"),(5291294645182005250,4295098369,"        First Level Interrupt Handler Time (MATUs)"),(5291294645182005251,4295098369,"   Second Level Interrupt Handler CPU Time (MATUs)"),(5291294645182005252,4295098369,"Second Level Interrupt Handler System Time (MATUs)")),"IOReportChannelInfo"={"IOReportChannelUnit"=0},"IOReportSubGroupName"="dart-isp 0"})
+7118:    | |       "device_type" = <"dart-mapper">
+7159:    | |       "no-firmware-service" = <>
+7160:    | |       "reconfig-firmware" = <>
+7168:    | +-o dart-ane@1800000  <class AppleARMIODevice, id 0x100000335, registered, matched, active, busy 0 (183 ms), retain 9>
+7170:    | | |   "dart-id" = <17000000>
+7177:    | | |   "dart-tunables-instance-1" = <0c02000004000000b701008000000000b70100800000000020020000040000000f0f0f00000000000f0f0f00000000002402000004000000ffffff000000000008080800000000000003000004000000311f00000000000001000000000000000803000004000000fcffff3f0000000000000010000000001003000004000000fcffff3f00000000fcffff3f000000001803000004000000311f00000000000001000000000000002003000004000000fcffff3f000000000000f001000000002803000004000000fcffff3f00000000fcbff001000000000008000004000000ff000f000000000000000600000000000408000004000000ff000f000000000000000600000000000808000004000000ff000f000000000040000300000000000c08000004000000ff000f000000000040000300000000001008000004000000ff000f000000000048000600000000001408000004000000ff000f000000000048000600000000001808000004000000ff000f000000000086000100000000001c08000004000000ff000f000000000086000100000000002008000004000000ff000f000000000086000100000000002408000004000000ff000f000000000086000100000000002808000004000000ff000f000000000086000100000000002c08000004000000ff000f000000000086000100000000003008000004000000ff000f000000000086000100000000003408000004000000ff000f000000000086000100000000003808000004000000ff000f000000000086000100000000003c08000004000000ff000f00000000008600010000000000>
+7179:    | | |   "dart-options" = <25000000>
+7181:    | | |   "name" = <"dart-ane">
+7184:    | | |   "compatible" = <"dart,t8110">
+7190:    | | |   "dart-tunables-instance-2" = <0c02000004000000b701008000000000b70100800000000020020000040000000f0f0f00000000000f0f0f00000000002402000004000000ffffff000000000008080800000000000003000004000000311f00000000000001000000000000000803000004000000fcffff3f0000000000000010000000001003000004000000fcffff3f00000000fcffff3f000000001803000004000000311f00000000000001000000000000002003000004000000fcffff3f000000000000f001000000002803000004000000fcffff3f00000000fcbff0010000000000080000040000007f000f0000000000000006000000000004080000040000007f000f0000000000000006000000000008080000040000007f000f000000000040000100000000000c080000040000007f000f0000000000400001000000000010080000040000007f000f0000000000400001000000000014080000040000007f000f0000000000400001000000000018080000040000007f000f000000000040000100000000001c080000040000007f000f0000000000400001000000000020080000040000007f000f0000000000400001000000000024080000040000007f000f0000000000400001000000000028080000040000007f000f000000000040000100000000002c080000040000007f000f0000000000400001000000000030080000040000007f000f0000000000400001000000000034080000040000007f000f0000000000400001000000000038080000040000007f000f000000000040000100000000003c080000040000007f000f00000000004000010000000000>
+7192:    | | |   "dart-tunables-instance-0" = <0c02000004000000b701008000000000b70100800000000020020000040000000f0f0f00000000000f0f0f00000000002402000004000000ffffff000000000008080800000000000003000004000000311f00000000000001000000000000000803000004000000fcffff3f0000000000000010000000001003000004000000fcffff3f00000000fcffff3f000000001803000004000000311f00000000000001000000000000002003000004000000fcffff3f000000000000f001000000002803000004000000fcffff3f00000000fcbff00100000000>
+7195:    | | |   "device_type" = <"dart">
+7196:    | | |   "IOReportLegend" = ({"IOReportGroupName"="Interrupt Statistics (by index)","IOReportChannels"=((5291294645182005248,4295098369,"               First Level Interrupt Handler Count"),(5291294645182005249,4295098369,"              Second Level Interrupt Handler Count"),(5291294645182005250,4295098369,"        First Level Interrupt Handler Time (MATUs)"),(5291294645182005251,4295098369,"   Second Level Interrupt Handler CPU Time (MATUs)"),(5291294645182005252,4295098369,"Second Level Interrupt Handler System Time (MATUs)")),"IOReportChannelInfo"={"IOReportChannelUnit"=0},"IOReportSubGroupName"="dart-ane 0"})
+7207:    | |       "device_type" = <"dart-mapper">
+7341:    | |       "firmware-name" = <"GFX">
+7343:    | |       "no-firmware-service" = <>
+7735:    |     "dcp-brightness-node" = <01000000>
+7782:    | |   "display-mirroring" = <01000000>
+7796:    | |   "partially-occluded-display" = <01000000>
+7803:    | |   "display-backlight-compensation" = <00000003029000000000ee8b000100000000fe8a0ccd00000000efc8000100000000fec0333300000000f35d000100000000ff67666600000000f73d0000ffa500010000999900000000fa550000ff6900010000cccc00000000fd420000ff9d00010000ffff0000000100000001000000010000>
+7818:    | |   "artwork-dynamic-displaymode" = <"0">
+7826:    | |   "atomic-firmware-update-support" = <01000000>
+7831:    | |   "artwork-display-gamut" = <"P3">

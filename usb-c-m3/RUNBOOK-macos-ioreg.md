@@ -46,3 +46,22 @@ Status: prepared, not started. Marius decides when to boot macOS.
   check `man ioreg` on the Mac.
 - The display node names on the M3 are expected to resemble `dcp`, `dcpext`, `disp0`
   and `dart`. The actual names in the dump decide the next step.
+
+## Result (2026-10-03, 17:11, macOS 27.0)
+
+- Step 2: macOS 27.0 (26A428), MacBook Air Mac15,12 (MXCV3D/A), Apple M3, system firmware
+  20457.1.29 (matches `mBoot-20457.1.29` in `/proc/device-tree/chosen` on Omarchy).
+- Steps 3–4: done. The full dump stays on the Mac Desktop only.
+- The step 4 grep catches node names but **no `reg` values** (the `reg` lines do not contain
+  any of the keywords). It also caught the internal SSD's `"Controller Characteristics"`
+  line with its `controller-unique-id`; that line is removed from every copy.
+- Added `fay-display-nodes.txt`: all properties of the 12 display nodes (`disp0`, `dcp`,
+  `dcp0-expert`, `dart-dcp`, `dart-disp0`, `dcp-sac-controller`, `display-crossbar0`, and the
+  `dispext0` / `dcpext` / `dcpext-expert` / `dart-dcpext` / `dart-dispext0` counterparts),
+  including the 8 `reg` values. No serials or unique IDs.
+- Both files are in `ioreg-j613/` in this folder and on the stick `FAYTESTa`.
+- Stick note: macOS could not read any of the four FAYTEST sticks (GPT type "Linux
+  Filesystem", no file system recognised). The stick with serial <serial removed> (`disk6` on
+  macOS) was reformatted on macOS as GPT + exFAT, label `FAYTESTa`. macOS adds a 200 MB EFI
+  partition in front; the exFAT volume is the second partition. The other three sticks are
+  unchanged.
