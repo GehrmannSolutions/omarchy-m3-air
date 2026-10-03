@@ -78,8 +78,11 @@ are dropped. The stick is not needed for this.
 segment regions 49, 50, 57, 94, 95 (from the ADT segment-ranges of the DCP nubs). It follows
 the M2 table. It compiles (`BUILDSTD=1`). Not verified on hardware.
 
+Update 2026-10-03, 22:30: the DCPEXT regions 73/74 are now in the draft, using the M1
+(t8103) table as precedent (same IDs, flags copied). Builds.
+
 Open before any install:
-- Region 14 (dcp segment #6) and 73/74 (dcpext) are not in the table.
+- Region 14 (dcp segment #6, ~63 MiB) is not in any table (M1, M2 or draft). Role unknown.
 - The t8112 flags (`map_dcp`, `map_disp`, `map_piodma`) are copied, not confirmed for t8122.
 - `dt_reserve_dcpext_firmware` is not added for t8122.
 - Boot chain layout of `/boot/m1n1/boot.bin` (6.2 MB) is not yet checked.
