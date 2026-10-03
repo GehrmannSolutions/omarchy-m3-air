@@ -1,0 +1,9 @@
+--- a/drivers/usb/typec/tipd/tps6598x.h
++++ b/drivers/usb/typec/tipd/tps6598x.h
+@@ -7,5 +7,6 @@
+ 
+ #include <linux/bits.h>
+ #include <linux/bitfield.h>
++#include <linux/interrupt.h>
+ #include <linux/power_supply.h>
+ #include <linux/usb/typec.h>

@@ -1,0 +1,37 @@
+--- a/drivers/phy/apple/atc.c
++++ b/drivers/phy/apple/atc.c
+@@ -919,7 +919,7 @@
+ 
+ static int atcphy_pipehandler_lock(struct apple_atcphy *atcphy)
+ {
+-	int ret;
++	int ret, retries = 10;
+ 	u32 reg;
+ 
+ 	if (readl(atcphy->regs.pipehandler + PIPEHANDLER_LOCK_REQ) & PIPEHANDLER_LOCK_EN) {
+@@ -927,15 +927,17 @@
+ 		return 0;
+ 	}
+ 
+-	set32(atcphy->regs.pipehandler + PIPEHANDLER_LOCK_REQ, PIPEHANDLER_LOCK_EN);
+-
+-	ret = readl_poll_timeout(atcphy->regs.pipehandler + PIPEHANDLER_LOCK_ACK, reg,
+-				 reg & PIPEHANDLER_LOCK_EN, 10, PIPEHANDLER_LOCK_ACK_TIMEOUT_US);
+-	if (ret) {
+-		clear32(atcphy->regs.pipehandler + PIPEHANDLER_LOCK_REQ, 1);
+-		dev_warn(atcphy->dev, "Pipehandler lock not acked.\n");
+-	}
++	do {
++		set32(atcphy->regs.pipehandler + PIPEHANDLER_LOCK_REQ, PIPEHANDLER_LOCK_EN);
++		ret = readl_poll_timeout(atcphy->regs.pipehandler + PIPEHANDLER_LOCK_ACK, reg,
++					 reg & PIPEHANDLER_LOCK_EN, 10, PIPEHANDLER_LOCK_ACK_TIMEOUT_US);
++		if (!ret)
++			return 0;
++		clear32(atcphy->regs.pipehandler + PIPEHANDLER_LOCK_REQ, PIPEHANDLER_LOCK_EN);
++		usleep_range(5000, 10000);
++	} while (--retries);
+ 
++	dev_warn(atcphy->dev, "Pipehandler lock not acked.\n");
+ 	return ret;
+ }
+ 
