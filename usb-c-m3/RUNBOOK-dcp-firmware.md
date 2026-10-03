@@ -61,3 +61,13 @@ are dropped. The stick is not needed for this.
 - DCP driver support for the 14.x firmware ABI on the 7.1 tree. The driver currently
   handles only 12.3 and 13.5; check the Asahi tree and mailing lists for ongoing M3
   DCP work before starting a port.
+
+## Result of step 3 (2026-10-03, 15:55, booted Omarchy 7.1.13)
+
+- `find /proc/device-tree -name 'apple,firmware-*'`: **no matches**. m1n1 did not provide
+  `apple,firmware-version` or `apple,firmware-compat` on this system.
+- DCP or DPTX node under `/proc/device-tree`: **none**.
+- `/proc/device-tree/chosen` contains the boot strings `mBoot-20457.1.29`,
+  `iBoot-10151.140.19.700.2`, `v1.6.1` (m1n1) and `14.7`. The meaning of `14.7` is not
+  confirmed; check before relying on it.
+- So the DCP firmware-ABI question is still open, and there is no DCP node to bind to.
