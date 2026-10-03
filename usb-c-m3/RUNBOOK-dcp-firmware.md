@@ -71,3 +71,15 @@ are dropped. The stick is not needed for this.
   `iBoot-10151.140.19.700.2`, `v1.6.1` (m1n1) and `14.7`. The meaning of `14.7` is not
   confirmed; check before relying on it.
 - So the DCP firmware-ABI question is still open, and there is no DCP node to bind to.
+
+## Draft m1n1 patch for t8122 (2026-10-03, DRAFT, not installed)
+
+`patches/m1n1-t8122-carveout-DRAFT.patch` adds the t8122 carveout table with the DCP
+segment regions 49, 50, 57, 94, 95 (from the ADT segment-ranges of the DCP nubs). It follows
+the M2 table. It compiles (`BUILDSTD=1`). Not verified on hardware.
+
+Open before any install:
+- Region 14 (dcp segment #6) and 73/74 (dcpext) are not in the table.
+- The t8112 flags (`map_dcp`, `map_disp`, `map_piodma`) are copied, not confirmed for t8122.
+- `dt_reserve_dcpext_firmware` is not added for t8122.
+- Boot chain layout of `/boot/m1n1/boot.bin` (6.2 MB) is not yet checked.
