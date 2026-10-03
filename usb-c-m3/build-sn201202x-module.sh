@@ -29,7 +29,7 @@ if [ ! -d base ]; then
   git init -q base && cd base
   git remote add origin https://github.com/torvalds/linux.git
   git fetch -q --depth 1 --filter=blob:none origin "$BASE_COMMIT"
-  git checkout -q FETCH_HEAD && git sparse-checkout set drivers/usb/typec/tipd MAINTAINERS
+  git checkout -q FETCH_HEAD && git sparse-checkout set drivers/usb/typec/tipd
   cd ..
 fi
 cd base
@@ -41,7 +41,6 @@ cd ..
 
 # 3. Copy patched tipd into the Asahi tree (its core.c differs from base only in one i2c id line).
 cp base/drivers/usb/typec/tipd/* asahi/drivers/usb/typec/tipd/
-cp base/MAINTAINERS asahi/MAINTAINERS
 
 # 4. PHY: retry the pipehandler lock (0005), then scope the WARN in atcphy_mux_set (0006).
 cd asahi
