@@ -39,12 +39,12 @@ macOS version. Then say so and send the output of `grep -n "region-id" ~/Desktop
 
 ## How to deliver
 
-Option 1 (preferred, no stick): on the Mac in `~/Desktop`, run
-`python3 -m http.server 8000`. Send the Mac's IP to Marius, then Fay fetches the file with
-`curl http://<Mac-IP>:8000/fay-region-ids.txt`.
+Use the stick `FAYTESTa`. It was formatted under macOS for read and write on both systems,
+and it already holds the earlier extract. Copy `~/Desktop/fay-region-ids.txt` to its root
+folder, under the name `fay-region-ids.txt`. Do not delete the other files on the stick.
 
-Option 2: copy the file to the exFAT stick `FAYTESTb` (one partition, no EFI). Tell Marius
-if macOS cannot mount it.
+Fallback, only if the stick cannot be used: `python3 -m http.server 8000` in `~/Desktop`,
+and Marius sends the Mac's IP so Fay can fetch the file with `curl`.
 
 ## What Fay does with it
 
