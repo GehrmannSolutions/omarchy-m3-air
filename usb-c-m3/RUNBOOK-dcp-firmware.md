@@ -82,7 +82,8 @@ Update 2026-10-03, 22:30: the DCPEXT regions 73/74 are now in the draft, using t
 (t8103) table as precedent (same IDs, flags copied). Builds.
 
 Open before any install:
-- Region 14 (dcp segment #6, ~63 MiB) is not in any table (M1, M2 or draft). Role unknown.
+- Region 14 is /vram (boot framebuffer), already reserved by m1n1 `dt_vram_reserved_region()`. Not needed in the table.
+- `dt_reserve_dcpext_firmware()` does not list t8122. Decide whether to add it (PR #608 added t6030 only).
 - The t8112 flags (`map_dcp`, `map_disp`, `map_piodma`) are copied, not confirmed for t8122.
 - `dt_reserve_dcpext_firmware` is not added for t8122.
 - Boot chain layout of `/boot/m1n1/boot.bin` (6.2 MB) is not yet checked.
