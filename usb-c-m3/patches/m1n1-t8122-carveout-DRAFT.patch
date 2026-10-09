@@ -36,7 +36,7 @@ index a5bd4f1..c3c8c30 100644
 +                                           ARRAY_SIZE(disp_reserved_regions_t8122));
 +        if (ret)
 +            return ret;
-+        ret = dt_carveout_reserved_regions("dcpext", NULL, NULL, dcpext_reserved_regions_t8122,
++        ret = dt_carveout_reserved_regions("dcpext0", NULL, NULL, dcpext_reserved_regions_t8122,
 +                                           ARRAY_SIZE(dcpext_reserved_regions_t8122));
 +        if (ret)
 +            return ret;
