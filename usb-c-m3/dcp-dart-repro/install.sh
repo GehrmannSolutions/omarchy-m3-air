@@ -179,6 +179,21 @@ BANNER_SHA=$(printf '%s\n' "$BANNER" | sha256sum | cut -d' ' -f1)
 chmod 0644 "$STATE/config"
 info "config written (vmlinux banner hash for the run-time build check)"
 
+# ------------------------------------------------------------ 3b kernel image
+# Installs the build tree's Image as /boot/vmlinuz-fay-dcp when it differs, so a
+# rebuilt test kernel (e.g. a DART logging patch) needs no separate copy step.
+IMG=$BUILD/arch/arm64/boot/Image
+if [[ -r $IMG ]] && ! cmp -s "$IMG" /boot/vmlinuz-fay-dcp; then
+	say "3b Installing the test kernel image from the build tree"
+	run cp -p /boot/vmlinuz-fay-dcp "$STATE/vmlinuz-fay-dcp.prev-$(date +%Y%m%d-%H%M%S)"
+	run install -m 0755 "$IMG" /boot/vmlinuz-fay-dcp.fay-new
+	run mv -f /boot/vmlinuz-fay-dcp.fay-new /boot/vmlinuz-fay-dcp
+	run sync -f /boot/vmlinuz-fay-dcp
+	cmp -s "$IMG" /boot/vmlinuz-fay-dcp || die "/boot/vmlinuz-fay-dcp differs from $IMG after install"
+else
+	info "test kernel image unchanged"
+fi
+
 # ------------------------------------------------------------ 4 script + unit
 say "4/5 Test script and systemd unit"
 run install -D -m 0755 "$KIT_DIR/fay-dcptest" "$SCRIPT"

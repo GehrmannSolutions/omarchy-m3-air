@@ -1,0 +1,148 @@
+--- a/drivers/iommu/apple-dart.c	2026-10-10 12:11:05.359102183 +0200
++++ b/drivers/iommu/apple-dart.c	2026-10-10 12:11:05.361782313 +0200
+@@ -21,6 +21,7 @@
+ #include <linux/io-pgtable.h>
+ #include <linux/iommu.h>
+ #include <linux/iopoll.h>
++#include <linux/memblock.h>
+ #include <linux/minmax.h>
+ #include <linux/module.h>
+ #include <linux/of.h>
+@@ -774,6 +775,98 @@
+ #define FAY_DART2_PADDR_MASK	GENMASK_ULL(37, 10)
+ #define FAY_DART2_PADDR_SHIFT	4
+ 
++static void *fay_pool_va;
++
++/* Kernel VA of a page-table PA, without sleeping (usable in the IRQ). */
++static u64 *fay_table_va(phys_addr_t pa)
++{
++	if (fay_pool_va && pa >= fay_pool_pa && pa < fay_pool_pa + fay_pool_size)
++		return fay_pool_va + (pa - fay_pool_pa);
++	if (memblock_is_map_memory(pa))
++		return __va(pa);
++	return NULL;
++}
++
++/*
++ * fay: dump what the DART hardware itself holds for one stream (registers)
++ * and walk the tables from the TTBR the hardware has, for @dva. Read only.
++ */
++static void apple_dart_fay_dump_sid(struct apple_dart *dart, int sid, u64 dva,
++				    const char *why)
++{
++	u64 *l1, *l2, l1e = 0, pte = 0;
++	phys_addr_t l1_pa, l2_pa = 0;
++	u32 ttbr, l1i, l2i;
++	int i;
++
++	if (dart->hw->type != DART_T8110)
++		return;
++
++	dev_info(dart->dev,
++		 "fay-regs: [%s] sid %d tcr %#x enable %#x disable %#x protect %#x/%#x/%#x err %#x addr %#x:%#x errstreams %#x tlbcmd %#x\n",
++		 why, sid, readl(dart->regs + DART_TCR(dart, sid)),
++		 readl(dart->regs + DART_T8110_ENABLE_STREAMS),
++		 readl(dart->regs + DART_T8110_DISABLE_STREAMS),
++		 readl(dart->regs + DART_T8110_PROTECT),
++		 readl(dart->regs + DART_T8110_UNPROTECT),
++		 readl(dart->regs + DART_T8110_PROTECT_LOCK),
++		 readl(dart->regs + DART_T8110_ERROR),
++		 readl(dart->regs + DART_T8110_ERROR_ADDR_HI),
++		 readl(dart->regs + DART_T8110_ERROR_ADDR_LO),
++		 readl(dart->regs + DART_T8110_ERROR_STREAMS),
++		 readl(dart->regs + DART_T8110_TLB_CMD));
++	for (i = 0; i < dart->hw->ttbr_count; i++)
++		dev_info(dart->dev, "fay-regs: [%s] sid %d ttbr[%d] %#x\n", why,
++			 sid, i, readl(dart->regs + DART_TTBR(dart, sid, i)));
++	for (i = 0x100; i < 0x200; i += 0x10)
++		dev_info(dart->dev, "fay-regs: [%s] +%#05x %08x %08x %08x %08x\n",
++			 why, i, readl(dart->regs + i), readl(dart->regs + i + 4),
++			 readl(dart->regs + i + 8), readl(dart->regs + i + 12));
++
++	/* software walk from the hardware TTBR[0] (2-level, 16K granule) */
++	ttbr = readl(dart->regs + DART_TTBR(dart, sid, 0));
++	if (!(ttbr & dart->hw->ttbr_valid)) {
++		dev_info(dart->dev, "fay-regs: [%s] sid %d ttbr[0] not valid\n", why, sid);
++		return;
++	}
++	ttbr &= ~dart->hw->ttbr_valid;
++	if (dart->hw->ttbr_addr_field_shift)
++		ttbr >>= dart->hw->ttbr_addr_field_shift;
++	l1_pa = ((phys_addr_t)ttbr) << dart->hw->ttbr_shift;
++	l1i = (dva >> 25) & 0x7ff;
++	l2i = (dva >> 14) & 0x7ff;
++	l1 = fay_table_va(l1_pa);
++	if (l1) {
++		l1e = READ_ONCE(l1[l1i]);
++		if (l1e & 1) {
++			l2_pa = (l1e & FAY_DART2_PADDR_MASK) << FAY_DART2_PADDR_SHIFT;
++			l2 = fay_table_va(l2_pa);
++			if (l2)
++				pte = READ_ONCE(l2[l2i]);
++		}
++	}
++	dev_info(dart->dev,
++		 "fay-regs: [%s] walk dva %#llx: L1 pa %pa%s L1[%#x]=%#llx L2 pa %pa L2[%#x]=%#llx\n",
++		 why, dva, &l1_pa, l1 ? "" : " (unmapped)", l1i, l1e, &l2_pa, l2i,
++		 pte);
++}
++
++/* Exported for appledrm's fay sweep: dump the DART state of @master. */
++void apple_dart_fay_dump(struct device *master, u64 dva, const char *why);
++void apple_dart_fay_dump(struct device *master, u64 dva, const char *why)
++{
++	struct apple_dart_master_cfg *cfg = dev_iommu_priv_get(master);
++	struct apple_dart *dart;
++	int sid;
++
++	if (!cfg || !cfg->stream_maps[0].dart)
++		return;
++	dart = cfg->stream_maps[0].dart;
++	for_each_set_bit(sid, cfg->stream_maps[0].sidmap, dart->num_streams)
++		apple_dart_fay_dump_sid(dart, sid, dva, why);
++}
++EXPORT_SYMBOL_GPL(apple_dart_fay_dump);
++
+ static void apple_dart_fay_setup_pool(struct apple_dart *dart,
+ 				      struct apple_dart_domain *dart_domain,
+ 				      struct apple_dart_master_cfg *cfg)
+@@ -849,6 +942,7 @@
+ 		dev_err(dart->dev, "fay-pool: cannot map pool, skipped\n");
+ 		return;
+ 	}
++	fay_pool_va = va;
+ 	apple_dart_pgtable_set_pool(dart_domain->pgtbl_ops, fay_pool_pa, va,
+ 				    pages, used);
+ 	dev_info(dart->dev, "fay-pool: active, pool %#lx+%#lx (%u pages), used mask %#lx\n",
+@@ -1507,6 +1601,9 @@
+ 		"translation fault: status:0x%x stream:%d code:0x%x (%s) at 0x%llx",
+ 		error, stream_idx, error_code, fault_name, addr);
+ 
++	if (stream_idx < dart->num_streams)
++		apple_dart_fay_dump_sid(dart, stream_idx, addr, "fault");
++
+ 	writel(error, dart->regs + DART_T8110_ERROR);
+ 	for (int i = 0; i < BITS_TO_U32(dart->num_streams); i++)
+ 		writel(U32_MAX, dart->regs + DART_T8110_ERROR_STREAMS + 4 * i);
+--- a/drivers/gpu/drm/apple/dcp.c	2026-10-10 12:11:11.937737950 +0200
++++ b/drivers/gpu/drm/apple/dcp.c	2026-10-10 12:11:05.362174125 +0200
+@@ -352,6 +352,9 @@
+ 		why, dva, pa, pa ? "" : " (NO TRANSLATION)");
+ }
+ 
++/* exported by drivers/iommu/apple-dart.c (fay patch 0010) */
++void apple_dart_fay_dump(struct device *master, u64 dva, const char *why);
++
+ void fay_dcp_sweep(struct apple_dcp *dcp, const char *why, struct seq_file *m)
+ {
+ 	struct fay_dcp_debug *fay = &dcp->fay;
+@@ -361,6 +364,8 @@
+ 	unsigned long id;
+ 
+ 	t0 = ktime_get_ns();
++	/* the DART's own view (registers + walk from the hardware TTBR) */
++	apple_dart_fay_dump(dcp->dev, FAY_DVA_FAULT_ADDR, why);
+ 	dom = iommu_get_domain_for_dev(dcp->dev);
+ 	if (!dom) {
+ 		fay_out(dcp, m,

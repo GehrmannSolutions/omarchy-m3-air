@@ -1006,7 +1006,19 @@ write_owner_verdict() {
 		/ dma_free: / { a = hexv("dma_addr"); s = decv("size"); if (covers(a, s, F)) { ev("FREE", "   <= callback: " cbof()); owner = "none (freed)"; ownkind = "freed" } }
 		/ map: IOMMU: / { a = hexv("iova"); s = decv("size"); if (covers(a, s, F)) ev("IOMMU_MAP", "   <= domain unknown (may be piodma/disp DART)") }
 		/ unmap: IOMMU: / { a = hexv("iova"); s = decv("size"); if (covers(a, s, F)) ev("IOMMU_UNMAP", "   <= domain unknown (may be piodma/disp DART)") }
-		/ fay_dmap: / { a = hexv("iova"); s = hexv("pgsz") * hexv("cnt"); if (covers(a, s, FM) || covers(a, s, F)) ev("DART_MAP", "   <= " dom()) }
+		/ fay_dmap: / {
+			a = hexv("iova"); s = hexv("pgsz") * hexv("cnt")
+			if (covers(a, s, FM) || covers(a, s, F)) {
+				d = dom(); ev("DART_MAP", "   <= " d)
+				# dma_map_resource (D411 map_reg) emits no dma_* tracepoint on
+				# this kernel, so a dcp-domain DART map is the owner record
+				if (d == "dcp domain" && ownkind != "map_phys" && ownkind != "alloc") {
+					c = cbof(); ownkind = "dart_map"; owncb = c
+					ownphys = hexv("pa") + (covers(a, s, FM) ? FM - a : F - a)
+					owner = sprintf("DART map in the dcp domain pa=0x%x, during callback %s", ownphys, c)
+				}
+			}
+		}
 		/ fay_dunmap: / { a = hexv("iova"); s = hexv("pgsz") * hexv("cnt"); if (covers(a, s, FM) || covers(a, s, F)) ev("DART_UNMAP", "   <= " dom()) }
 		/ fay_r41[1]: / { a = hexv("dva"); s = hexv("len"); if (covers(a, s, F)) ev("D411_RET", "") }
 		/ fay_r45[12]: / { a = hexv("dva"); s = hexv("dsz"); if (covers(a, s, F)) ev("D45x_RET", "") }
@@ -1016,6 +1028,10 @@ write_owner_verdict() {
 			print "owner at the end of this trace: " owner
 			if (ownkind == "map_phys" && int(ownphys / 16384) * 16384 == strtonum("0x2d03d0000"))
 				print "=> H1 identity CONFIRMED: the page is the pmgr dashboard mapping (phys 0x2d03d0000) from " owncb
+			else if (ownkind == "dart_map" && int(ownphys / 16384) * 16384 == strtonum("0x2d03d0000"))
+				print "=> H1 identity CONFIRMED: the page is the pmgr dashboard mapping (phys 0x2d03d0000), DART-mapped during " owncb
+			else if (ownkind == "dart_map")
+				print "=> page is DART-mapped in the dcp domain to another physical address (see DART_MAP line)"
 			else if (ownkind == "map_phys")
 				print "=> page is a dma_map_resource/phys mapping of another physical address (see MAP_PHYS line)"
 			else if (ownkind == "alloc")
