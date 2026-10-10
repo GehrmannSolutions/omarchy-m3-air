@@ -146,6 +146,10 @@ if [[ ${FAY_STRIP:-0} != 1 ]]; then
 	cmp -s "$KO" "$MODDIR/kernel/drivers/gpu/drm/apple/appledrm.ko" ||
 		die "installed appledrm.ko differs from $KO"
 fi
+# the fay-dcp initramfs carries its own copy of appledrm.ko (loaded early on the
+# desktop entry), so rebuild it whenever the modules change
+run mkinitcpio -k "$KREL" -g /boot/initramfs-fay-dcp.img
+run sync -f /boot/initramfs-fay-dcp.img
 # make ran as root inside the user's tree: give back anything it created
 OWNER=$(stat -c %U:%G "$BUILD")
 run find "$BUILD" -xdev -user root -exec chown -h "$OWNER" {} +
