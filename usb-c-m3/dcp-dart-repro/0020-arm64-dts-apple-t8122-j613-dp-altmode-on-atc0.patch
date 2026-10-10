@@ -1,0 +1,86 @@
+--- a/arch/arm64/boot/dts/apple/t8122.dtsi
++++ b/arch/arm64/boot/dts/apple/t8122.dtsi
+@@ -1625,6 +1625,14 @@
+ 			power-domains = <&ps_atc0_usb>;
+ 		};
+ 
++		atcphy0_xbar: mux@70304c000 {
++			compatible = "apple,t8122-display-crossbar", "apple,t6020-display-crossbar";
++			reg = <0x7 0x0304c000 0x0 0x4000>;
++			#mux-control-cells = <1>;
++			power-domains = <&ps_atc0_usb>;
++			status = "disabled";
++		};
++
+ 		usb4_1_mbox: mailbox@b01108000 {
+ 			compatible = "apple,t8122-asc-mailbox",
+ 				"apple,asc-mailbox-v4";
+@@ -1791,6 +1799,14 @@
+ 			mode-switch;
+ 			power-domains = <&ps_atc1_usb>;
+ 		};
++
++		atcphy1_xbar: mux@b0304c000 {
++			compatible = "apple,t8122-display-crossbar", "apple,t6020-display-crossbar";
++			reg = <0xb 0x0304c000 0x0 0x4000>;
++			#mux-control-cells = <1>;
++			power-domains = <&ps_atc1_usb>;
++			status = "disabled";
++		};
+ 	};
+ };
+ 
+--- a/arch/arm64/boot/dts/apple/t8122-j613.dts
++++ b/arch/arm64/boot/dts/apple/t8122-j613.dts
+@@ -209,3 +209,51 @@
+ };
+ 
+ #include "hwmon-laptop.dtsi"
++
++/*
++ * fay: DisplayPort alt mode on the left-back USB-C port (typec0, atc0), the
++ * way Asahi's fairydust branch does it for t8112/t602x. Values from the
++ * macOS ADT on this model: dcpext is display-crossbar ufp1, port 0, so the
++ * t602x-type crossbar state is 2 (dispext1,0); atc0-dpxbar sits at
++ * 0x70304c000 with compatible "atc-dpxbar,t602x". dcpext itself is enabled
++ * by m1n1 once its firmware is reserved.
++ */
++/ {
++	aliases {
++		dcpext = &dcpext;
++	};
++};
++
++&display {
++	iommus = <&disp_dart 0>, <&dispext0_dart 0 0x100 0x0 0x10 0x0>;
++};
++
++&dispext0_dart {
++	status = "okay";
++};
++
++&dcpext_dart {
++	status = "okay";
++};
++
++&dcpext_mbox {
++	status = "okay";
++};
++
++&atcphy0_xbar {
++	status = "okay";
++};
++
++&dcpext {
++	apple,connector-type = "DP";
++	apple,dptx-phy = <0>;
++	phys = <&atcphy0 PHY_TYPE_DP>;
++	phy-names = "dp-phy";
++	mux-controls = <&atcphy0_xbar 0>;
++	mux-control-names = "dp-xbar";
++	mux-index = <2>;
++};
++
++&typec0 {
++	displayport = <&dcpext>;
++};

@@ -1,0 +1,102 @@
+m1n1 v1.6.1 + Fay's t8122 changes (DRAFT): display carveouts for dcp/dcpext0, dcpext firmware
+reservation enabled for t8122, dcpext0 carveout failure non-fatal, /chosen/fay,m1n1-log debug aid.
+
+diff --git i/src/kboot.c w/src/kboot.c
+index a5bd4f1..894ef06 100644
+--- i/src/kboot.c
++++ w/src/kboot.c
+@@ -1865,6 +1865,23 @@ static struct disp_mapping dcpext_reserved_regions_t8103[] = {
+     {"region-id-74", "region74", true, false, false},
+ };
+ 
++/* DRAFT t8122 (M3). Region IDs from the ADT segment-ranges of iop-dcp-nub and iop-dcpext-nub
++ * (macOS 27.0, 2026-10-03). Flags copied from t8112 until verified. Not for install. */
++/* DRAFT t8122 DCPEXT: same regions as the t8103 table (73 dcpext_data, 74 region74); matches the
++ * DCPEXT segments found in the ADT segment-ranges (2026-10-03). Not for install. */
++static struct disp_mapping dcpext_reserved_regions_t8122[] = {
++    {"region-id-73", "dcpext_data", true, false, false},
++    {"region-id-74", "region74", true, false, false},
++};
++
++static struct disp_mapping disp_reserved_regions_t8122[] = {
++    {"region-id-49", "asc-firmware", true, false, false},
++    {"region-id-50", "dcp_data", true, false, false},
++    {"region-id-57", "region57", true, false, false},
++    {"region-id-94", "region94", true, true, false},
++    {"region-id-95", "region95", true, false, true},
++};
++
+ static struct disp_mapping disp_reserved_regions_t8112[] = {
+     {"region-id-49", "asc-firmware", true, false, false},
+     {"region-id-50", "dcp_data", true, false, false},
+@@ -1955,6 +1972,19 @@ static int dt_set_display(void)
+ 
+         ret = dt_carveout_reserved_regions("dcpext", NULL, NULL, dcpext_reserved_regions_t8103,
+                                            ARRAY_SIZE(dcpext_reserved_regions_t8103));
++    } else if (!fdt_node_check_compatible(dt, 0, "apple,t8122")) {
++        ret = dt_carveout_reserved_regions("dcp", "disp0", "disp0_piodma",
++                                           disp_reserved_regions_t8122,
++                                           ARRAY_SIZE(disp_reserved_regions_t8122));
++        if (ret)
++            return ret;
++        ret = dt_carveout_reserved_regions("dcpext0", NULL, NULL, dcpext_reserved_regions_t8122,
++                                           ARRAY_SIZE(dcpext_reserved_regions_t8122));
++        if (ret) {
++            /* fay: keep booting with dcp only; the reason is in /chosen/fay,m1n1-log */
++            printf("FDT: dcpext0 carveout failed (%d), continuing without dcpext\n", ret);
++            ret = 0;
++        }
+     } else if (!fdt_node_check_compatible(dt, 0, "apple,t8112")) {
+         ret = dt_carveout_reserved_regions("dcp", "disp0", "disp0_piodma",
+                                            disp_reserved_regions_t8112,
+@@ -2001,6 +2031,7 @@ static int dt_set_display(void)
+      * if the reservation fails allowing basic operation with just dcp.
+      */
+     if (!fdt_node_check_compatible(dt, 0, "apple,t8112") ||
++        !fdt_node_check_compatible(dt, 0, "apple,t8122") ||
+         !fdt_node_check_compatible(dt, 0, "apple,t6020") ||
+         !fdt_node_check_compatible(dt, 0, "apple,t6021") ||
+         !fdt_node_check_compatible(dt, 0, "apple,t6022"))
+@@ -2746,6 +2777,33 @@ static int dt_setup_mtd_phram(void)
+     return 0;
+ }
+ 
++/*
++ * fay: hand the tail of m1n1's console ring buffer to the OS as
++ * /chosen/fay,m1n1-log, so DT preparation failures (e.g. dcpext carveouts)
++ * can be read on machines without a serial console. Debug aid, not upstream.
++ */
++extern char con_buf[];
++extern size_t con_wp;
++#define FAY_M1N1_LOG_MAX 4096
++
++static void dt_set_fay_m1n1_log(void)
++{
++    static char log[FAY_M1N1_LOG_MAX + 1];
++    const size_t ring = 8192; /* CONSOLE_BUFFER_SIZE in iodev.c */
++    size_t len = min(con_wp, (size_t)FAY_M1N1_LOG_MAX);
++    size_t start = con_wp - len;
++
++    for (size_t i = 0; i < len; i++) {
++        char c = con_buf[(start + i) % ring];
++        log[i] = c ? c : ' ';
++    }
++    log[len] = '\0';
++
++    int chosen = fdt_path_offset(dt, "/chosen");
++    if (chosen < 0 || fdt_setprop_string(dt, chosen, "fay,m1n1-log", log) < 0)
++        printf("FDT: could not set fay,m1n1-log\n");
++}
++
+ int kboot_prepare_dt(void *fdt)
+ {
+     if (dt) {
+@@ -2847,6 +2905,8 @@ int kboot_prepare_dt(void *fdt)
+     if (dt_set_memory())
+         return -1;
+ 
++    dt_set_fay_m1n1_log();
++
+     if (fdt_pack(dt))
+         bail("FDT: fdt_pack() failed\n");
+ 
