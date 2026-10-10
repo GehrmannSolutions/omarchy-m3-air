@@ -1,0 +1,56 @@
+--- a/drivers/iommu/apple-dart.c
++++ b/drivers/iommu/apple-dart.c
+@@ -867,6 +867,33 @@
+ }
+ EXPORT_SYMBOL_GPL(apple_dart_fay_dump);
+ 
++/*
++ * fay test (patch 0011): with apple_dart.fay_flush_poff=1 on the command line,
++ * flush the whole DART TLB of @master's DART (FLUSH_ALL, then FLUSH_SID) when
++ * appledrm is about to send setPowerState(0). Tests the stale-cache theory.
++ */
++static bool fay_flush_poff;
++module_param(fay_flush_poff, bool, 0444);
++
++void apple_dart_fay_flush(struct device *master, const char *why);
++void apple_dart_fay_flush(struct device *master, const char *why)
++{
++	struct apple_dart_master_cfg *cfg = dev_iommu_priv_get(master);
++	struct apple_dart_stream_map *map;
++	int r1, r2;
++
++	if (!fay_flush_poff || !cfg || !cfg->stream_maps[0].dart)
++		return;
++	map = &cfg->stream_maps[0];
++	if (map->dart->hw->type != DART_T8110)
++		return;
++	r1 = apple_dart_t8110_hw_tlb_command(map, DART_T8110_TLB_CMD_OP_FLUSH_ALL);
++	r2 = apple_dart_t8110_hw_tlb_command(map, DART_T8110_TLB_CMD_OP_FLUSH_SID);
++	dev_info(map->dart->dev, "fay-flush: [%s] FLUSH_ALL rc=%d FLUSH_SID rc=%d tlbcmd %#x\n",
++		 why, r1, r2, readl(map->dart->regs + DART_T8110_TLB_CMD));
++}
++EXPORT_SYMBOL_GPL(apple_dart_fay_flush);
++
+ static void apple_dart_fay_setup_pool(struct apple_dart *dart,
+ 				      struct apple_dart_domain *dart_domain,
+ 				      struct apple_dart_master_cfg *cfg)
+--- a/drivers/gpu/drm/apple/dcp.c
++++ b/drivers/gpu/drm/apple/dcp.c
+@@ -354,6 +354,7 @@
+ 
+ /* exported by drivers/iommu/apple-dart.c (fay patch 0010) */
+ void apple_dart_fay_dump(struct device *master, u64 dva, const char *why);
++void apple_dart_fay_flush(struct device *master, const char *why);
+ 
+ void fay_dcp_sweep(struct apple_dcp *dcp, const char *why, struct seq_file *m)
+ {
+@@ -364,6 +365,9 @@
+ 	unsigned long id;
+ 
+ 	t0 = ktime_get_ns();
++	/* patch 0011: optional DART TLB flush right before setPowerState(0) */
++	if (!strcmp(why, "poff") || !strcmp(why, "sleep"))
++		apple_dart_fay_flush(dcp->dev, why);
+ 	/* the DART's own view (registers + walk from the hardware TTBR) */
+ 	apple_dart_fay_dump(dcp->dev, FAY_DVA_FAULT_ADDR, why);
+ 	dom = iommu_get_domain_for_dev(dcp->dev);
