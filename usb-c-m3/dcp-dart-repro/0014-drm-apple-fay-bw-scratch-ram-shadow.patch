@@ -1,0 +1,48 @@
+--- a/drivers/gpu/drm/apple/dcp.c
++++ b/drivers/gpu/drm/apple/dcp.c
+@@ -51,6 +51,15 @@
+ 
+ static bool show_notch;
+ module_param(show_notch, bool, 0644);
++
++/*
++ * fay test (patch 0014): hand the firmware a RAM shadow page instead of the
++ * pmgr bw-scratch ("dashboard") page for D411 map_reg, to test whether the
++ * DART refuses DCP writes to that MMIO page at power-down.
++ */
++bool fay_bw_shadow;
++module_param(fay_bw_shadow, bool, 0444);
++MODULE_PARM_DESC(fay_bw_shadow, "fay debug: map a RAM shadow page for the bw-scratch register (test only)");
+ MODULE_PARM_DESC(show_notch, "Use the full display height and shows the notch");
+ 
+ bool hdmi_audio;
+--- a/drivers/gpu/drm/apple/iomfb_template.c
++++ b/drivers/gpu/drm/apple/iomfb_template.c
+@@ -474,8 +474,25 @@
+ 	} else {
+ 		struct resource *rsrc = dcp->disp_registers[req->index];
+ #if DCP_FW_VER >= DCP_FW_VERSION(13, 2, 0)
+-		dma_addr_t dva = dma_map_resource(dcp->dev, rsrc->start, resource_size(rsrc),
+-						  DMA_BIDIRECTIONAL, 0);
++		extern bool fay_bw_shadow;
++		dma_addr_t dva;
++
++		if (fay_bw_shadow && dcp->disp_bw_scratch_index &&
++		    req->index == dcp->disp_bw_scratch_index) {
++			void *shadow = dma_alloc_coherent(dcp->dev,
++							  resource_size(rsrc),
++							  &dva, GFP_KERNEL);
++
++			if (!shadow)
++				dva = DMA_MAPPING_ERROR;
++			dev_info(dcp->dev,
++				 "fay-bw-shadow: map_reg(%u) %pR -> RAM shadow dva %pad\n",
++				 req->index, rsrc, &dva);
++		} else {
++			dva = dma_map_resource(dcp->dev, rsrc->start,
++					       resource_size(rsrc),
++					       DMA_BIDIRECTIONAL, 0);
++		}
+ 		WARN_ON(dva == DMA_MAPPING_ERROR);
+ 		/* fay: remember the DVA for the IOMMU sweep (debug only) */
+ 		fay_dcp_record_map(dcp, 411, req->index, rsrc->start,
