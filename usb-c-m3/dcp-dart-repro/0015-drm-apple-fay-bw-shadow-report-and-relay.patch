@@ -1,0 +1,112 @@
+--- a/drivers/gpu/drm/apple/dcp.c
++++ b/drivers/gpu/drm/apple/dcp.c
+@@ -60,6 +60,50 @@
+ bool fay_bw_shadow;
+ module_param(fay_bw_shadow, bool, 0444);
+ MODULE_PARM_DESC(fay_bw_shadow, "fay debug: map a RAM shadow page for the bw-scratch register (test only)");
++
++/*
++ * fay patch 0015: observe what the firmware writes into the shadow page and,
++ * with fay_bw_relay=1, forward the dashboard word (bw-scratch offset) to the
++ * real pmgr register after the firmware has finished powering down.
++ */
++bool fay_bw_relay;
++module_param(fay_bw_relay, bool, 0444);
++MODULE_PARM_DESC(fay_bw_relay, "fay debug: relay the shadow dashboard word to pmgr after power-off (test only)");
++void *fay_bw_shadow_va;
++size_t fay_bw_shadow_size;
++
++void fay_bw_shadow_report(struct apple_dcp *dcp, const char *why);
++void fay_bw_shadow_report(struct apple_dcp *dcp, const char *why)
++{
++	u32 *w = fay_bw_shadow_va;
++	unsigned int i, nz = 0, off = dcp->disp_bw_scratch_offset;
++	void __iomem *reg;
++
++	if (!w)
++		return;
++	for (i = 0; i < fay_bw_shadow_size / 4; i++) {
++		if (!READ_ONCE(w[i]))
++			continue;
++		if (nz++ < 16)
++			dev_info(dcp->dev, "fay-bw-shadow: [%s] +%#06x = %#010x\n",
++				 why, i * 4, READ_ONCE(w[i]));
++	}
++	dev_info(dcp->dev, "fay-bw-shadow: [%s] %u non-zero words, dashboard word (+%#x) = %#010x\n",
++		 why, nz, off, READ_ONCE(w[off / 4]));
++
++	reg = ioremap(dcp->disp_bw_scratch_res.start,
++		      resource_size(&dcp->disp_bw_scratch_res));
++	if (!reg)
++		return;
++	dev_info(dcp->dev, "fay-bw-shadow: [%s] real pmgr dashboard %pa+%#x = %#010x\n",
++		 why, &dcp->disp_bw_scratch_res.start, off, readl(reg + off));
++	if (fay_bw_relay && !strcmp(why, "poff-done")) {
++		writel(READ_ONCE(w[off / 4]), reg + off);
++		dev_info(dcp->dev, "fay-bw-relay: wrote %#010x -> pmgr dashboard, read back %#010x\n",
++			 READ_ONCE(w[off / 4]), readl(reg + off));
++	}
++	iounmap(reg);
++}
+ MODULE_PARM_DESC(show_notch, "Use the full display height and shows the notch");
+ 
+ bool hdmi_audio;
+--- a/drivers/gpu/drm/apple/iomfb_template.c
++++ b/drivers/gpu/drm/apple/iomfb_template.c
+@@ -479,12 +479,16 @@
+ 
+ 		if (fay_bw_shadow && dcp->disp_bw_scratch_index &&
+ 		    req->index == dcp->disp_bw_scratch_index) {
++			extern void *fay_bw_shadow_va;
++			extern size_t fay_bw_shadow_size;
+ 			void *shadow = dma_alloc_coherent(dcp->dev,
+ 							  resource_size(rsrc),
+ 							  &dva, GFP_KERNEL);
+ 
+ 			if (!shadow)
+ 				dva = DMA_MAPPING_ERROR;
++			fay_bw_shadow_va = shadow;
++			fay_bw_shadow_size = resource_size(rsrc);
+ 			dev_info(dcp->dev,
+ 				 "fay-bw-shadow: map_reg(%u) %pR -> RAM shadow dva %pad\n",
+ 				 req->index, rsrc, &dva);
+@@ -828,6 +832,13 @@
+ 	int ret;
+ 	u32 handle;
+ 	dev_info(dcp->dev, "dcp_poweron() starting\n");
++#if DCP_FW_VER >= DCP_FW_VERSION(14, 7, 0)
++	{
++		extern void fay_bw_shadow_report(struct apple_dcp *dcp, const char *why);
++
++		fay_bw_shadow_report(dcp, "poweron");
++	}
++#endif
+ 
+ 	cookie = kzalloc(sizeof(*cookie), GFP_KERNEL);
+ 	if (!cookie)
+@@ -888,6 +899,11 @@
+ #if DCP_FW_VER >= DCP_FW_VERSION(14, 7, 0)
+ 	/* fay: DART state right before setPowerState(0) (debug only) */
+ 	fay_dcp_sweep(dcp, "poff", NULL);
++	{
++		extern void fay_bw_shadow_report(struct apple_dcp *dcp, const char *why);
++
++		fay_bw_shadow_report(dcp, "poff");
++	}
+ #endif
+ 	dcp_set_power_state(dcp, false, &power_req, complete_set_powerstate,
+ 			    cookie);
+@@ -990,6 +1006,13 @@
+ 	kref_put(&poff_cookie->refcount, release_wait_cookie);
+ 
+ 	dev_info(dcp->dev, "dcp_poweroff() done\n");
++#if DCP_FW_VER >= DCP_FW_VERSION(14, 7, 0)
++	{
++		extern void fay_bw_shadow_report(struct apple_dcp *dcp, const char *why);
++
++		fay_bw_shadow_report(dcp, "poff-done");
++	}
++#endif
+ }
+ 
+ static void last_client_closed_sleep(struct apple_dcp *dcp, void *out, void *cookie)
