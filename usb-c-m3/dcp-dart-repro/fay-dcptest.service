@@ -1,0 +1,34 @@
+# fay-dcptest.service - DCP/DART power-down test (installed by install.sh)
+#
+# Runs /usr/local/sbin/fay-dcptest once per boot, and only when BOTH hold:
+#   - the kernel command line contains fay.dcptest=1 (only the GRUB entry
+#     "fay-dcp DCP test" sets it), and
+#   - /var/lib/fay-dcptest/armed exists (written by arm.sh, removed by the
+#     script as its very first action).
+# On every normal boot the conditions are false and the unit is skipped.
+
+[Unit]
+Description=fay DCP/DART power-down test (fay.dcptest=1 + armed file only)
+ConditionKernelCommandLine=fay.dcptest=1
+ConditionPathExists=/var/lib/fay-dcptest/armed
+Wants=sys-kernel-tracing.mount sys-kernel-debug.mount
+After=local-fs.target sys-kernel-tracing.mount sys-kernel-debug.mount systemd-journald.service systemd-modules-load.service
+# Second backstop, independent of the script: if the run is still going
+# after TimeoutStartSec, systemd stops the unit and the start counts as
+# failed, which triggers a forced reboot. The script's own sysrq watchdog
+# fires first: 1200 s + delay + 120 s per repeat, at most
+# 1200 + 3600 + 5 * 120 = 5400 s, so 6000 s = the largest watchdog + 600 s.
+# (A forced reboot still runs driver shutdown; it is the last resort only.
+# The unit stop also kills the script's watchdog, hence the margin.)
+FailureAction=reboot-force
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/fay-dcptest
+TimeoutStartSec=6000
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=fay-dcptest
+
+[Install]
+WantedBy=multi-user.target

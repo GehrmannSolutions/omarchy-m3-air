@@ -1,0 +1,1511 @@
+#!/bin/bash
+# fay-dcptest - one-shot DCP/DART power-down test for the 7.2.2-fay-dcp kernel.
+#
+# Installed as /usr/local/sbin/fay-dcptest by install.sh. Started by
+# fay-dcptest.service, which runs only when the kernel command line has
+# fay.dcptest=1 AND /var/lib/fay-dcptest/armed exists (written by arm.sh).
+#
+# Implements critic-repro-plan.md (S0-S9) and critic-instrumentation.md (A-E)
+# from ~/.cache/fay-build/analysis/2026-10-09-dart-fault/. Every probe offset
+# is verified in probes-verification.md (next to this file in the kit).
+#
+# Modes (key "mode" in the armed file):
+#   dry  - trace the boot-time DCP mappings, decide who owns DVA 0x10fffdfc000
+#          (VERDICT-owner.txt), snapshot the page tables, reboot. Never blanks.
+#   full - as dry, then blank the panel through fbdev (FB_BLANK_POWERDOWN, the
+#          kernel path of the crash), capture the post state, try to unblank,
+#          save everything and reboot (sysrq s/u/b after a crash).
+#
+# Safety rules (all enforced below):
+#   - S0 first removes the armed file and clears GRUB next_entry.
+#   - Every wait is bounded; kernel calls that might block run in the
+#     background and are abandoned after their time budget.
+#   - A watchdog (started before anything that can block) forces a sysrq
+#     reboot after 1200 s + delay + 120 s per repeat; it never waits on a
+#     filesystem first. fay-dcptest.service adds a second backstop
+#     (TimeoutStartSec + FailureAction=reboot-force).
+#   - The final reboot skips driver shutdown (sysrq s/u/b) unless the
+#     display state is known to be good (no crash, no failed or unfinished
+#     blank cycle, no timed-out kernel call).
+#   - Any probe/tracing failure => tracepoint-only, the screen is NOT blanked.
+#   - Results go to /var/lib/fay-dcptest/<boot_id>/, synced after each step.
+#     UUIDs, hostname, serials and MAC addresses are redacted in the env,
+#     dmesg and journal copies (the kit itself contains none of them).
+
+set -Eeuo pipefail
+export LC_ALL=C
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+umask 022
+
+# ---------------------------------------------------------------- constants
+readonly STATE_DIR=/var/lib/fay-dcptest
+readonly ARMED="$STATE_DIR/armed"
+readonly CONF="$STATE_DIR/config"
+readonly GRUBENV=/boot/grub/grubenv
+readonly T=/sys/kernel/tracing
+readonly DBG=/sys/kernel/debug
+readonly EXPECT_KREL=7.2.2-fay-dcp
+readonly DCP_DEV=28ec00000.dcp
+readonly DART_DCP=28d30c000.iommu
+readonly DART_DISP=28d304000.iommu
+readonly FAULT_DVA=0x10fffdfc000
+readonly EXPECT_PTE=0x000fff002d03d003     # pmgr 0x2d03d0000, SUBPAGE_END 0xfff, NO_CACHE, VALID
+readonly LINEAR_BASE=0xffff000000000000     # PAGE_OFFSET, VA_BITS=48 (__phys_to_virt)
+
+# IOVA windows of DART L1 slot 0x7ff. iommu tracepoints and
+# apple_dart_iotlb_sync_map see the full DVA (0x10ffe000000..). dart_map_pages
+# and dart_unmap_pages see it masked to ias=36 (apple-dart.c:696/708,
+# "Limited to ias=36 due to lock"), i.e. 0xffe000000.. . Both are accepted.
+readonly IOVA_FILTER_FULL='iova >= 0x10ffe000000 && iova < 0x11000000000'
+readonly IOVA_FILTER_BOTH='(iova >= 0xffe000000 && iova < 0x1000000000) || (iova >= 0x10ffe000000 && iova < 0x11000000000)'
+
+# Stage-1 kprobes on vmlinux (critic-instrumentation.md C1-C6).
+# Offsets (gdb on the build-tree vmlinux, see probes-verification.md):
+#   io_pgtable.ops = 0x78, .cfg = 0x10, io_pgtable_cfg.apple_dart_cfg.ttbr[0] = 0x40
+#     => ttbr[0] (kernel L1 KVA) at ops - 0x28
+#   apple_dart_domain.pgtbl_ops = 0x0, .domain = 0xa8
+#   apple_dart_stream_map.dart = 0x0, .sidmap = 0x8
+#   apple_dart.dev = 0x0, .sid2group[5] = 0x80, .locked_ttbr[5][0] = 0x1d30
+#   device.kobj = 0x0, kobject.name = 0x0, iommu_group.domain = 0xb0
+#   generic_pm_domain.name = 0x480
+#   L1 slot 0x7ff = +0x3ff8, L2 slot 0x77f = +0x3bf8 (64-byte line +0x3bc0)
+C_PROBES=(
+	'p:fay/fay_dmap dart_map_pages l1=-0x28($arg1):x64 iova=$arg2:x64 pa=$arg3:x64 pgsz=$arg4:x64 cnt=$arg5:x64 prot=$arg6:x32'
+	'p:fay/fay_dunmap dart_unmap_pages l1=-0x28($arg1):x64 iova=$arg2:x64 pgsz=$arg3:x64 cnt=$arg4:x64'
+	'p:fay/fay_syncmap apple_dart_iotlb_sync_map l1=-0x28(-0xa8($arg1)):x64 kl1=+0x3ff8(-0x28(-0xa8($arg1))):x64 iova=$arg2:x64 size=$arg3:x64'
+	'p:fay/fay_tlbinv apple_dart_t8110_hw_invalidate_tlb dart=+0($arg1):x64 name=+0(+0(+0(+0($arg1)))):string sid=+8($arg1):x64'
+	'p:fay/fay_irq apple_dart_t8110_irq name=+0(+0(+0($arg2))):string lk1=+0x3ff8(+0x1d30($arg2)):x64 kl1=+0x3ff8(-0x28(-0xa8(+0xb0(+0x80($arg2))))):x64'
+	'p:fay/fay_pmgr apple_pmgr_ps_set name=+0(+0x480($arg1)):string pstate=$arg2:u32 auto=$arg3:u8'
+)
+C_FILTERS=(
+	"$IOVA_FILTER_BOTH"
+	"$IOVA_FILTER_BOTH"
+	"$IOVA_FILTER_BOTH"
+	"name == \"$DART_DCP\" || name == \"$DART_DISP\""
+	"name == \"$DART_DCP\""
+	""
+)
+# vmlinux symbols the C/D probes depend on; checked against System.map.
+readonly VMLINUX_SYMS="dart_map_pages dart_unmap_pages apple_dart_iotlb_sync_map apple_dart_t8110_hw_invalidate_tlb apple_dart_t8110_irq apple_pmgr_ps_set __arm64_sys_sync memstart_addr"
+
+# Stage-E kprobes on appledrm statics (critic-instrumentation.md E).
+# Each trampoline exists 3 times (v12_3, v13_3, v14_7). kprobe_events rejects
+# non-unique names and an absolute-address probe gets no $argN (no FENTRY
+# flag, trace_kprobe.c), so the probe point is written as
+# appledrm:<unique anchor>+<offset>; the kprobe core displaces that to the
+# start of the v14_7 trampoline and treats it as a function entry.
+# Trampoline args: (struct apple_dcp *dcp, int tag, void *out, void *in).
+readonly E_ANCHOR=iomfb_poweroff_v13_3
+readonly E_V14_REF=iomfb_poweroff_v14_7_0
+E_PROBES=(
+	'trampoline_zero|p|fay_t574|tag=$arg2:s32 in=+0($arg4):x32'
+	'trampoline_release_mem_desc|p|fay_t454|tag=$arg2:s32 id=+0($arg4):u32'
+	'trampoline_get_time|p|fay_t209|tag=$arg2:s32'
+	'trampoline_map_reg|r|fay_r411|tag=$arg2:s32 idx=+4($arg4):u32 flags=+8($arg4):x32 dva=+0($arg3):x64 addr=+8($arg3):x64 len=+16($arg3):x64 ret=+24($arg3):u32'
+	'trampoline_allocate_buffer|r|fay_r451|tag=$arg2:s32 size=+4($arg4):x64 pa=+0($arg3):x64 dva=+8($arg3):x64 dsz=+16($arg3):x64 id=+24($arg3):u32'
+	'trampoline_map_physical|r|fay_r452|tag=$arg2:s32 pa=+0($arg4):x64 size=+8($arg4):x64 dva=+0($arg3):x64 dsz=+8($arg3):x64 id=+16($arg3):u32'
+)
+
+# ---------------------------------------------------------------- state
+MAINPID=$BASHPID
+STEP=init
+OUT=""
+BOOT_ID=""
+ARMED_CONTENT=""
+MODE=dry
+DELAY=20
+REPEATS=3
+REBOOT_PREF=auto
+OWNER=""
+VMLINUX=""
+SYSMAP=""
+BANNER_SHA256=""
+BLANK_OK=1            # cleared by any setup failure: no blank in this boot
+ABORT_REASONS=()
+KPROBES_ALLOWED=1
+CRASHED=0
+BLANK_TRIGGERED=0
+UNBLANK_FAILED=0
+IN_CYCLE=0            # 1 between a blank write and a clean unblank
+KERNEL_STUCK=0        # a kernel call (modprobe, blank, unblank, sync) timed out
+STUCK_WHAT=()
+REBOOT_ISSUED=0
+HOST_RE=""
+WATCHDOG_SECS=""
+QUIET_CONSOLE=0
+FBDEV=""
+DART_KVA=""
+L1_KVA=""
+L2_KVA=""
+STAGE2_OK=0
+
+# ---------------------------------------------------------------- helpers
+log() {
+	local msg
+	msg="[$(date '+%F %T.%3N')] [$STEP] $*"
+	printf '%s\n' "$msg"
+	if [[ -n $OUT && -d $OUT ]]; then
+		printf '%s\n' "$msg" >> "$OUT/run.log" 2>/dev/null || true
+	fi
+	return 0
+}
+
+kmsg() {
+	printf '<5>fay-dcptest: %s\n' "$*" > /dev/kmsg 2>/dev/null || true
+	return 0
+}
+
+# User-visible line on the text console. Fire and forget: a write to
+# /dev/console takes console_lock and may block while fb_blank holds it.
+say() {
+	log "$*"
+	if [[ $QUIET_CONSOLE == 1 ]]; then
+		return 0
+	fi
+	( printf '\r\n*** fay-dcptest: %s\r\n' "$*" > /dev/console ) > /dev/null 2>&1 &
+	disown "$!" 2> /dev/null || true
+	return 0
+}
+
+step() {
+	STEP=$1
+	shift
+	log "=== $STEP: $*"
+	kmsg "$STEP: $*"
+	# marker in the ftrace buffer ("tracing_mark_write: fay-dcptest S5.1 ...")
+	printf 'fay-dcptest %s %s\n' "$STEP" "$*" > "$T/trace_marker" 2> /dev/null || true
+	return 0
+}
+
+abort_blank() {
+	BLANK_OK=0
+	ABORT_REASONS+=("$*")
+	log "NO-BLANK: $*"
+	return 0
+}
+
+# run_bounded <secs> <cmd...>: runs cmd in the background and waits at most
+# <secs>. Returns the exit code of cmd, or 124 on timeout. A command that is
+# stuck in the kernel (D state) is abandoned, never waited for.
+run_bounded() {
+	local secs=$1
+	shift
+	"$@" &
+	local pid=$! ticks=0 limit=$(( secs * 10 )) rc=0
+	while kill -0 "$pid" 2> /dev/null; do
+		if (( ticks >= limit )); then
+			kill -TERM "$pid" 2> /dev/null || true
+			sleep 1
+			kill -KILL "$pid" 2> /dev/null || true
+			disown "$pid" 2> /dev/null || true
+			log "TIMEOUT after ${secs}s: $*"
+			return 124
+		fi
+		sleep 0.1
+		ticks=$(( ticks + 1 ))
+	done
+	wait "$pid" || rc=$?
+	return "$rc"
+}
+
+# kbounded <secs> <cmd...>: run_bounded for calls that enter the kernel and
+# can hang there (modprobe, fb blank/unblank, sync). A timeout marks the
+# kernel as stuck; the final reboot then uses sysrq (no driver shutdown).
+kbounded() {
+	local rc=0
+	run_bounded "$@" || rc=$?
+	if (( rc == 124 )); then
+		KERNEL_STUCK=1
+		STUCK_WHAT+=("${*:2}")
+		log "kernel call timed out - the final reboot will use sysrq: ${*:2}"
+	fi
+	return "$rc"
+}
+
+# write_file <path> <value>: one write() into a sysfs/tracefs file.
+write_file() {
+	printf '%s\n' "$2" > "$1"
+}
+
+# Identifiers that must not end up in shared result files: UUIDs, the build
+# user@host in the kernel banner, this machine's hostname, serial numbers and
+# MAC addresses. The hostname is read at run time, never stored in the kit.
+init_redact() {
+	local h
+	h=$(cat /proc/sys/kernel/hostname 2> /dev/null || true)
+	if [[ $h =~ ^[A-Za-z0-9][A-Za-z0-9.-]{0,62}$ && $h != localhost ]]; then
+		HOST_RE=${h//./\\.}
+	fi
+	return 0
+}
+
+redact() {
+	local args=(-E
+		-e 's/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/<UUID>/g'
+		-e 's/(Linux version [^ ]+ \()[^ ()@]+@[^ ()]+\)/\1<user>@<host>)/g'
+		-e 's/((SerialNumber|[Ss]erial[ _-]?[Nn]umber|serial_number|serial)[:=] *)[^ ,;)]+/\1<serial>/g'
+		-e 's/([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}/<mac>/g')
+	if [[ -n $HOST_RE ]]; then
+		args+=(-e "s/(^|[[:space:]@(=])$HOST_RE([[:space:]):,]|\$)/\\1<host>\\2/g")
+	fi
+	sed "${args[@]}"
+}
+
+_save_inner() {
+	local f=$1
+	shift
+	"$@" > "$OUT/$f" 2>&1
+}
+
+_save_redacted_inner() {
+	local f=$1
+	shift
+	"$@" 2>&1 | redact > "$OUT/$f"
+}
+
+# save <secs> <file in OUT> <cmd...>: best effort, bounded.
+save() {
+	local secs=$1 f=$2
+	shift 2
+	if ! run_bounded "$secs" _save_inner "$f" "$@"; then
+		log "WARN: saving $f returned non-zero ($*)"
+	fi
+	return 0
+}
+
+# save_redacted: as save, output passed through redact (dmesg, journal, env).
+save_redacted() {
+	local secs=$1 f=$2
+	shift 2
+	if ! run_bounded "$secs" _save_redacted_inner "$f" "$@"; then
+		log "WARN: saving $f returned non-zero ($*)"
+	fi
+	return 0
+}
+
+persist() {
+	if [[ -n $OUT ]]; then
+		kbounded 60 sync -f "$OUT" || log "WARN: syncfs failed or timed out"
+	fi
+	return 0
+}
+
+hx() {
+	printf '0x%x' "$1"
+}
+
+# kfield <line> <name>: value of name=0x... in one kprobe trace line.
+kfield() {
+	sed -n "s/.* $2=\(0x[0-9a-f]*\).*/\1/p" <<< "$1"
+}
+
+# dmesg_has <pattern>: bounded dmesg read, then grep the saved copy
+# (a pipe into grep -q would fail under pipefail when dmesg gets SIGPIPE).
+dmesg_has() {
+	run_bounded 20 _save_redacted_inner .dmesg-probe.tmp dmesg || true
+	grep -q -e "$1" "$OUT/.dmesg-probe.tmp" 2> /dev/null
+}
+
+# heq <a> <b>: numeric equality of two hex/decimal values (ftrace prints x64
+# without leading zeros, so string comparison is not safe).
+heq() {
+	[[ $1 =~ ^(0x[0-9a-fA-F]+|[0-9]+)$ && $2 =~ ^(0x[0-9a-fA-F]+|[0-9]+)$ ]] && (( $1 == $2 ))
+}
+
+# 16-digit hex addresses of all copies of a symbol in a kallsyms excerpt.
+sym_addrs() {
+	awk -v s="$2" '$3 == s { print $1 }' "$1" | sort
+}
+
+# ----------------------------------------------------- /proc/kcore reader
+# kcore_dump <kva> <len> <outfile> [qword offsets to print...]
+read -r -d '' PY_KCORE << 'PY' || true
+import os, struct, sys
+kva = int(sys.argv[1], 0)
+size = int(sys.argv[2], 0)
+out = sys.argv[3]
+offs = [int(x, 0) for x in sys.argv[4:]]
+fd = os.open('/proc/kcore', os.O_RDONLY)
+data = None
+try:
+    eh = os.pread(fd, 64, 0)
+    if eh[:4] != b'\x7fELF' or eh[4] != 2 or eh[5] != 1:
+        sys.exit('kcore: not an ELF64 little-endian file')
+    phoff = struct.unpack_from('<Q', eh, 0x20)[0]
+    shoff = struct.unpack_from('<Q', eh, 0x28)[0]
+    phentsize, phnum = struct.unpack_from('<HH', eh, 0x36)
+    if phnum == 0xffff:
+        phnum = struct.unpack_from('<I', os.pread(fd, 64, shoff), 0x2c)[0]
+    ph = os.pread(fd, phentsize * phnum, phoff)
+    for i in range(phnum):
+        (p_type, _f, p_off, p_vaddr, _pa, p_filesz, _m, _al) = \
+            struct.unpack_from('<IIQQQQQQ', ph, i * phentsize)
+        if p_type == 1 and p_vaddr <= kva and kva + size <= p_vaddr + p_filesz:
+            data = os.pread(fd, size, p_off + (kva - p_vaddr))
+            break
+finally:
+    os.close(fd)
+if data is None:
+    sys.exit('kcore: no PT_LOAD covers 0x%x' % kva)
+if len(data) != size:
+    sys.exit('kcore: short read %d of %d' % (len(data), size))
+if out != '-':
+    with open(out, 'wb') as f:
+        f.write(data)
+nz = sum(1 for o in range(0, size - size % 8, 8) if struct.unpack_from('<Q', data, o)[0])
+print('kcore 0x%x+0x%x -> %s: %d non-zero qwords' % (kva, size, out, nz))
+for o in offs:
+    print('  [+0x%x] = 0x%016x' % (o, struct.unpack_from('<Q', data, o)[0]))
+PY
+
+_kcore_py() {
+	python3 -c "$PY_KCORE" "$@"
+}
+
+_kcore_gdb() {
+	local kva=$1 len=$2 out=$3
+	gdb -batch -nx -ex "dump binary memory $out $kva $(hx $(( kva + len )))" "$VMLINUX" /proc/kcore
+}
+
+kcore_dump() {
+	local kva=$1 len=$2 out=$3
+	shift 3
+	if run_bounded 60 _kcore_py "$kva" "$len" "$out" "$@" >> "$OUT/kcore.log" 2>&1; then
+		log "kcore: $(tail -n $(( $# + 1 )) "$OUT/kcore.log" | tr '\n' ' ')"
+		return 0
+	fi
+	log "WARN: python kcore read of $kva failed, trying gdb"
+	if [[ -n $VMLINUX && -r $VMLINUX ]] &&
+		run_bounded 180 _kcore_gdb "$kva" "$len" "$out" >> "$OUT/kcore.log" 2>&1; then
+		log "kcore (gdb): dumped $kva+$len to $out"
+		return 0
+	fi
+	log "WARN: kcore dump of $kva failed"
+	return 0
+}
+
+# ---------------------------------------------------------------- traps
+on_err() {
+	if [[ $BASHPID == "$MAINPID" ]]; then
+		log "ERR at line $1: $2"
+	fi
+	return 0
+}
+
+on_exit() {
+	local rc=$?
+	if [[ $BASHPID != "$MAINPID" ]] || [[ $REBOOT_ISSUED == 1 ]]; then
+		return 0
+	fi
+	trap - ERR
+	set +eu
+	STEP=on_exit
+	log "unexpected exit (rc=$rc) - saving what we can and rebooting"
+	ABORT_REASONS+=("unexpected script exit rc=$rc")
+	BLANK_OK=0
+	finish
+}
+
+on_term() {
+	# systemd stops us (shutdown in progress, or 'systemctl stop'): just leave.
+	REBOOT_ISSUED=1
+	log "SIGTERM received - exiting without further action"
+	exit 0
+}
+
+trap 'on_err "$LINENO" "$BASH_COMMAND"' ERR
+trap on_exit EXIT
+trap on_term TERM
+
+# ---------------------------------------------------------------- S0
+disarm_first() {
+	# FIRST action: a wrong or repeated boot must never loop into the test.
+	local content=""
+	if [[ -f $ARMED ]]; then
+		content=$(head -c 4096 -- "$ARMED" 2> /dev/null || true)
+	fi
+	rm -f -- "$ARMED" || true
+	ARMED_CONTENT=$content
+	if ! mountpoint -q /boot; then
+		run_bounded 30 mount /boot || true
+	fi
+	if [[ -f $GRUBENV ]]; then
+		run_bounded 20 grub-editenv "$GRUBENV" unset next_entry || true
+	fi
+	kbounded 30 sync -f "$STATE_DIR" || true
+	return 0
+}
+
+parse_armed() {
+	local line key val
+	while IFS= read -r line; do
+		line=${line%%#*}
+		line=${line//[[:space:]]/}
+		if [[ -z $line || $line != *=* ]]; then
+			continue
+		fi
+		key=${line%%=*}
+		val=${line#*=}
+		case $key in
+		mode)
+			if [[ $val =~ ^(dry|full)$ ]]; then MODE=$val; fi
+			;;
+		delay)
+			if [[ $val =~ ^[0-9]{1,4}$ ]] && (( 10#$val <= 3600 )); then DELAY=$(( 10#$val )); fi
+			;;
+		repeats)
+			if [[ $val =~ ^[1-5]$ ]]; then REPEATS=$val; fi
+			;;
+		reboot)
+			if [[ $val =~ ^(auto|clean|sysrq)$ ]]; then REBOOT_PREF=$val; fi
+			;;
+		owner)
+			if [[ $val =~ ^[a-z_][a-z0-9_-]{0,31}$ ]]; then OWNER=$val; fi
+			;;
+		esac
+	done <<< "$ARMED_CONTENT"
+	return 0
+}
+
+read_config() {
+	local line key val
+	if [[ ! -r $CONF ]]; then
+		log "WARN: $CONF missing (install.sh not run?)"
+		return 0
+	fi
+	while IFS= read -r line; do
+		if [[ $line != *=* ]]; then
+			continue
+		fi
+		key=${line%%=*}
+		val=${line#*=}
+		case $key in
+		VMLINUX)
+			if [[ $val =~ ^/[A-Za-z0-9._/-]+$ ]]; then VMLINUX=$val; fi
+			;;
+		SYSMAP)
+			if [[ $val =~ ^/[A-Za-z0-9._/-]+$ ]]; then SYSMAP=$val; fi
+			;;
+		BANNER_SHA256)
+			if [[ $val =~ ^[0-9a-f]{64}$ ]]; then BANNER_SHA256=$val; fi
+			;;
+		esac
+	done < "$CONF"
+	return 0
+}
+
+_env_block() {
+	echo "boot_id: $BOOT_ID"
+	echo "date: $(date -Is)"
+	echo "mode=$MODE delay=$DELAY repeats=$REPEATS reboot=$REBOOT_PREF"
+	echo "(UUIDs, user@host, hostname, serials and MAC addresses are redacted)"
+	echo "--- uname -srvmo"; uname -srvmo
+	echo "--- /proc/version"; cat /proc/version
+	echo "--- /proc/cmdline"; cat /proc/cmdline
+	echo "--- tainted: $(cat /proc/sys/kernel/tainted)"
+	echo "--- kptr_restrict: $(cat /proc/sys/kernel/kptr_restrict)"
+	echo "--- free -m"; free -m
+	echo "--- df -h / /boot /var/lib"; df -h / /boot /var/lib
+	echo "--- lsmod"; lsmod
+}
+
+# Only the variable names of grubenv and whether next_entry survived S0;
+# no values (they can contain entry titles and ids).
+_grubenv_summary() {
+	local l
+	l=$(grub-editenv "$GRUBENV" list) || return 1
+	echo "grubenv variables (names only): $(sed 's/=.*//' <<< "$l" | tr '\n' ' ')"
+	if grep -q '^next_entry=' <<< "$l"; then
+		echo "next_entry present after S0: YES - GRUB would pick it again"
+	else
+		echo "next_entry present after S0: no"
+	fi
+}
+
+record_env() {
+	save_redacted 30 00-env.txt _env_block
+	printf '%s\n' "$ARMED_CONTENT" > "$OUT/armed.txt" 2>/dev/null || true
+	if [[ -f $GRUBENV ]]; then
+		save 20 grubenv-after-S0.txt _grubenv_summary
+		if grep -q 'present after S0: YES' "$OUT/grubenv-after-S0.txt" 2> /dev/null; then
+			kmsg "WARNING: GRUB next_entry is still set after S0"
+			log "WARNING: GRUB next_entry is still set after S0 (grub-editenv unset failed)"
+		fi
+	fi
+	return 0
+}
+
+# Watchdog: forced sysrq reboot if the whole run takes too long. The most
+# likely reason for a stuck main script is a blocked filesystem write, so
+# nothing in here waits on a filesystem before sysrq b: no sync(2) call
+# (sysrq s is already an asynchronous emergency sync), and the marker file is
+# written by a disowned background job that may block without harm.
+start_watchdog() {
+	local secs=$(( 1200 + DELAY + REPEATS * 120 ))
+	WATCHDOG_SECS=$secs
+	(
+		set +e
+		trap - ERR EXIT TERM
+		# a killed sleep (service stopped, clean reboot) must not fire the watchdog
+		sleep "$secs" || exit 0
+		printf '<3>fay-dcptest: watchdog fired after %ss, forcing sysrq reboot\n' "$secs" > /dev/kmsg
+		( echo "watchdog fired after ${secs}s" > "$OUT/WATCHDOG-FIRED.txt" ) &
+		disown "$!"
+		echo s > /proc/sysrq-trigger
+		sleep 3
+		echo u > /proc/sysrq-trigger
+		sleep 3
+		echo b > /proc/sysrq-trigger
+	) > /dev/null 2>&1 &
+	disown "$!" 2> /dev/null || true
+	log "watchdog armed: forced sysrq reboot after ${secs}s"
+	return 0
+}
+
+inhibit_sleep() {
+	# Lid close or suspend key would suspend the machine (DCP power-down path).
+	if command -v systemd-inhibit > /dev/null; then
+		systemd-inhibit --what=sleep:idle:handle-lid-switch:handle-suspend-key:handle-hibernate-key \
+			--who=fay-dcptest --why="DCP test running" --mode=block \
+			sleep 7200 > /dev/null 2>&1 &
+		disown "$!" 2> /dev/null || true
+	fi
+	return 0
+}
+
+# Verify the running kernel is the build whose vmlinux the offsets came from.
+check_build() {
+	local sym want got n ok=1
+	if [[ -z $SYSMAP || ! -r $SYSMAP ]]; then
+		log "no System.map copy - cannot verify the running kernel build"
+		ok=0
+	else
+		awk 'NF == 3' /proc/kallsyms > "$OUT/kallsyms-vmlinux.tmp" 2>/dev/null || true
+		for sym in $VMLINUX_SYMS; do
+			want=$(awk -v s="$sym" '$3 == s { print $1; exit }' "$SYSMAP")
+			got=$(awk -v s="$sym" '$3 == s { print $1; exit }' "$OUT/kallsyms-vmlinux.tmp")
+			n=$(awk -v s="$sym" '$3 == s { c++ } END { print c + 0 }' "$OUT/kallsyms-vmlinux.tmp")
+			if [[ -z $want || $want != "$got" || $n -ne 1 ]]; then
+				log "build check: $sym System.map=$want kallsyms=$got count=$n -> MISMATCH"
+				ok=0
+			fi
+		done
+		rm -f "$OUT/kallsyms-vmlinux.tmp"
+	fi
+	if [[ -n $BANNER_SHA256 ]]; then
+		if [[ $(sha256sum < /proc/version | cut -d' ' -f1) != "$BANNER_SHA256" ]]; then
+			log "build check: /proc/version differs from the vmlinux banner -> MISMATCH"
+			ok=0
+		fi
+	else
+		log "build check: no banner hash in $CONF (System.map check only)"
+	fi
+	if [[ $ok != 1 ]]; then
+		KPROBES_ALLOWED=0
+		abort_blank "running kernel does not match the verified vmlinux; kprobes disabled"
+		return 0
+	fi
+	log "build check: running kernel matches System.map/banner of the verified vmlinux"
+	return 0
+}
+
+ensure_kallsyms_visible() {
+	local a
+	a=$(awk '$3 == "dart_map_pages" { print $1; exit }' /proc/kallsyms)
+	if [[ $a =~ ^0+$ ]]; then
+		log "kallsyms addresses hidden, setting kptr_restrict=1 (root sees addresses)"
+		write_file /proc/sys/kernel/kptr_restrict 1 || true
+	fi
+	return 0
+}
+
+# ---------------------------------------------------------------- S1
+add_probe() {
+	local def=$1 filt=${2:-} ev
+	ev=${def%% *}
+	ev=${ev#*:}
+	: > "$T/error_log" 2> /dev/null || true
+	if ! printf '%s\n' "$def" >> "$T/kprobe_events" 2>> "$OUT/probe-errors.txt"; then
+		probe_fail "$ev" register "$def"
+		return 0
+	fi
+	if [[ -n $filt ]] && ! printf '%s\n' "$filt" > "$T/events/$ev/filter" 2>> "$OUT/probe-errors.txt"; then
+		probe_fail "$ev" filter "$filt"
+		return 0
+	fi
+	if ! printf '1\n' > "$T/events/$ev/enable" 2>> "$OUT/probe-errors.txt"; then
+		probe_fail "$ev" enable ""
+		return 0
+	fi
+	printf '%s\n' "$def" >> "$OUT/probes-registered.txt"
+	log "probe ok: $ev"
+	return 0
+}
+
+probe_fail() {
+	{
+		echo "### $1: $2 failed"
+		echo "definition: $3"
+		echo "--- error_log"
+		cat "$T/error_log" 2> /dev/null
+	} >> "$OUT/probe-errors.txt" 2>&1 || true
+	abort_blank "kprobe $1: $2 failed (tracepoint-only from here)"
+	return 0
+}
+
+tp_enable() {
+	# tp_enable <system/event> <filter or empty>
+	local ev=$1 filt=$2
+	if [[ ! -d $T/events/$ev ]]; then
+		abort_blank "tracepoint $ev does not exist"
+		return 0
+	fi
+	if [[ -n $filt ]] && ! write_file "$T/events/$ev/filter" "$filt" 2>> "$OUT/probe-errors.txt"; then
+		abort_blank "tracepoint $ev: filter rejected"
+		return 0
+	fi
+	if ! write_file "$T/events/$ev/enable" 1 2>> "$OUT/probe-errors.txt"; then
+		abort_blank "tracepoint $ev: enable failed"
+		return 0
+	fi
+	log "tracepoint ok: $ev ${filt:+(filter: $filt)}"
+	return 0
+}
+
+setup_tracing() {
+	local ev i
+	if ! mountpoint -q "$T"; then
+		run_bounded 20 mount -t tracefs nodev "$T" || true
+	fi
+	if [[ ! -w $T/kprobe_events ]]; then
+		abort_blank "tracefs not available at $T"
+		return 0
+	fi
+	write_file "$T/tracing_on" 0 || true
+	if [[ -d $T/events/fay ]]; then
+		write_file "$T/events/fay/enable" 0 || true
+	fi
+	: > "$T/kprobe_events" 2>> "$OUT/probe-errors.txt" || true
+	: > "$T/set_event" || true          # clears events and the :mod: cache
+	write_file "$T/trace_clock" local || abort_blank "trace_clock local rejected"
+	if ! write_file "$T/buffer_size_kb" 16384 2>> "$OUT/probe-errors.txt"; then
+		log "WARN: 16 MiB per-CPU buffer refused, trying 8 MiB"
+		write_file "$T/buffer_size_kb" 8192 || true
+	fi
+	if [[ -e $T/options/pause-on-trace ]]; then
+		write_file "$T/options/pause-on-trace" 0 || true
+	fi
+	: > "$T/trace" || true
+
+	# A: built-in tracepoints, filtered
+	for ev in dma_map_phys dma_unmap_phys dma_alloc dma_free; do
+		tp_enable "dma/$ev" "device ~ \"$DCP_DEV*\""
+	done
+	for ev in map unmap; do
+		tp_enable "iommu/$ev" "$IOVA_FILTER_FULL"
+	done
+
+	# B: appledrm tracepoints, pre-armed through the :mod: cache
+	if [[ -d /sys/module/appledrm ]]; then
+		abort_blank "appledrm is already loaded before tracing was armed (boot-time trace impossible)"
+	fi
+	for ev in iomfb_callback iomfb_push dcp_recv_msg dcp_send_msg; do
+		if ! printf '%s\n' "dcp:$ev:mod:appledrm" >> "$T/set_event" 2>> "$OUT/probe-errors.txt"; then
+			abort_blank "set_event dcp:$ev:mod:appledrm rejected"
+		fi
+	done
+	cat "$T/set_event" > "$OUT/set_event-S1.txt" 2>&1 || true
+	if ! grep -q 'iomfb_callback' "$OUT/set_event-S1.txt"; then
+		abort_blank "dcp:iomfb_callback not visible in set_event after :mod: caching"
+	fi
+
+	# C: kprobes on vmlinux
+	if [[ $KPROBES_ALLOWED == 1 ]]; then
+		for i in "${!C_PROBES[@]}"; do
+			add_probe "${C_PROBES[$i]}" "${C_FILTERS[$i]}"
+		done
+	else
+		abort_blank "vmlinux kprobes skipped (build check failed)"
+	fi
+
+	write_file "$T/tracing_on" 1 || abort_blank "tracing_on=1 failed"
+	cat "$T/dynamic_events" > "$OUT/dynamic_events-S1.txt" 2>&1 || true
+	return 0
+}
+
+# ---------------------------------------------------------------- S2
+find_appledrm_fb() {
+	local f
+	for f in /sys/class/graphics/fb*; do
+		if [[ -r $f/name && $(cat "$f/name" 2> /dev/null) == appledrmfb ]]; then
+			printf '%s\n' "$f"
+			return 0
+		fi
+	done
+	return 0
+}
+
+load_appledrm() {
+	local rc=0 i params=()
+	# The instrumented module logs every IOMFB callback only with
+	# fay_cb_log=1 (its default 2 skips the per-frame D589/D591 swaps).
+	if modinfo -F parm appledrm 2> /dev/null | grep -q '^fay_cb_log:'; then
+		params=(fay_cb_log=1)
+	else
+		log "appledrm has no fay_cb_log parameter (not the instrumented build)"
+	fi
+	kmsg "S2: modprobe appledrm ${params[*]}"
+	if kbounded 90 modprobe appledrm "${params[@]}"; then rc=0; else rc=$?; fi
+	log "modprobe appledrm ${params[*]} rc=$rc"
+	if [[ $rc != 0 ]]; then
+		abort_blank "modprobe appledrm failed (rc=$rc)"
+	fi
+	for (( i = 0; i < 30; i++ )); do
+		FBDEV=$(find_appledrm_fb)
+		if [[ -n $FBDEV ]] && dmesg_has 'set_digital_out_mode'; then
+			break
+		fi
+		sleep 1
+	done
+	if [[ -z $FBDEV ]]; then
+		abort_blank "no appledrmfb framebuffer within 30 s"
+	else
+		log "framebuffer: $FBDEV ($(cat "$FBDEV/name" 2> /dev/null || true))"
+	fi
+	if ! dmesg_has 'set_digital_out_mode'; then
+		abort_blank "no set_digital_out_mode in dmesg within 30 s"
+	fi
+	log "settling 10 s for the remaining boot callbacks"
+	sleep 10
+	return 0
+}
+
+# ---------------------------------------------------------------- S3 / D / E
+stage2() {
+	local tr="$OUT/trace-stage2.txt" darts n line dl1 dkl1 lk1 ms msk l2pa lk
+	if [[ $KPROBES_ALLOWED != 1 ]]; then
+		abort_blank "stage 2 skipped (no kprobes)"
+		return 0
+	fi
+	save 60 trace-stage2.txt cat "$T/trace"
+	darts=$( { grep 'fay_tlbinv:' "$tr" | grep -F "name=\"$DART_DCP\"" |
+		sed -n 's/.* dart=\(0x[0-9a-f]*\).*/\1/p' | sort -u; } 2> /dev/null || true)
+	n=$(wc -w <<< "$darts")
+	if [[ $n -ne 1 ]]; then
+		abort_blank "stage 2: expected one struct apple_dart for $DART_DCP in fay_tlbinv, found $n"
+		return 0
+	fi
+	DART_KVA=$darts
+	log "struct apple_dart ($DART_DCP) at $DART_KVA"
+	lk=$(hx $(( DART_KVA + 0x1d30 )))
+	add_probe "p:fay/fay_dom __arm64_sys_sync dl1=-0x28(-0xa8(+0xb0(@$(hx $(( DART_KVA + 0x80 )))))):x64 dkl1=+0x3ff8(-0x28(-0xa8(+0xb0(@$(hx $(( DART_KVA + 0x80 ))))))):x64 lk1=+0x3ff8(@$lk):x64 ms=@memstart_addr:x64"
+	if ! grep -q 'fay_dom ' "$OUT/probes-registered.txt" 2> /dev/null; then
+		return 0
+	fi
+	kbounded 60 sync || true
+	sleep 0.5
+	line=$( { grep 'fay_dom:' "$T/trace" | tail -n 1; } 2> /dev/null || true)
+	log "fay_dom: $line"
+	dl1=$(kfield "$line" dl1)
+	dkl1=$(kfield "$line" dkl1)
+	lk1=$(kfield "$line" lk1)
+	ms=$(kfield "$line" ms)
+	if [[ ! $dl1 =~ ^0xffff[0-9a-f]{12}$ || -z $dkl1 || -z $ms || $ms == 0x0 ]]; then
+		abort_blank "stage 2: fay_dom gave no usable values (dl1=$dl1 dkl1=$dkl1 ms=$ms)"
+		return 0
+	fi
+	if (( (dkl1 & 1) == 0 )); then
+		abort_blank "stage 2: kernel L1[0x7ff]=$dkl1 of the dcp domain is not valid"
+		return 0
+	fi
+	L1_KVA=$dl1
+	l2pa=$(( (dkl1 & 0x3FFFFFFC00) << 4 ))
+	L2_KVA=$(hx $(( LINEAR_BASE + l2pa - ms )))
+	if (( (L2_KVA & 0x3fff) != 0 )); then
+		abort_blank "stage 2: L2 KVA $L2_KVA not 16K aligned"
+		return 0
+	fi
+	{
+		echo "dart($DART_DCP)       = $DART_KVA"
+		echo "memstart_addr          = $ms"
+		echo "dcp domain L1 KVA      = $L1_KVA"
+		echo "kernel L1[0x7ff]       = $dkl1"
+		echo "locked L1[0x7ff]       = $lk1   (equal to the kernel entry: $(heq "$dkl1" "$lk1" && echo yes || echo NO))"
+		echo "L2 PA                  = $(hx "$l2pa")"
+		echo "L2 KVA                 = $L2_KVA"
+		echo "leaf 0x77f (DVA $FAULT_DVA) at $(hx $(( L2_KVA + 0x3bf8 )))"
+		echo "--- fay_syncmap kl1 values seen for this L1 (should equal kernel L1[0x7ff]):"
+		grep 'fay_syncmap:' "$tr" | grep -F "l1=$L1_KVA " | sed -n 's/.* kl1=\(0x[0-9a-f]*\).*/\1/p' | sort | uniq -c
+	} > "$OUT/stage2.txt" 2>&1 || true
+	log "stage 2: L1=$L1_KVA kl1=$dkl1 lk1=$lk1 L2=$L2_KVA"
+	# cross-check memstart_addr through /proc/kcore (kernel image segment)
+	msk=$(awk '$3 == "memstart_addr" && NF == 3 { print $1; exit }' /proc/kallsyms)
+	if [[ $msk =~ ^[0-9a-f]{16}$ ]]; then
+		kcore_dump "0x$msk" 8 - 0x0
+	fi
+	add_probe "p:fay/fay_irq2 apple_dart_t8110_irq name=+0(+0(+0(\$arg2))):string pte=@$(hx $(( L2_KVA + 0x3bf8 ))):x64 line=@$(hx $(( L2_KVA + 0x3bc0 ))):x64[8]" "name == \"$DART_DCP\""
+	add_probe "p:fay/fay_snap __arm64_sys_sync pte=@$(hx $(( L2_KVA + 0x3bf8 ))):x64 line=@$(hx $(( L2_KVA + 0x3bc0 ))):x64[8] kl1=@$(hx $(( L1_KVA + 0x3ff8 ))):x64 lk1=+0x3ff8(@$lk):x64 kl1_40=@$(hx $(( L1_KVA + 0x200 ))):x64 lk1_40=+0x200(@$lk):x64"
+	if grep -q 'fay_snap ' "$OUT/probes-registered.txt" 2> /dev/null &&
+		grep -q 'fay_irq2 ' "$OUT/probes-registered.txt" 2> /dev/null; then
+		STAGE2_OK=1
+	fi
+	return 0
+}
+
+e_probes() {
+	local ks="$OUT/kallsyms-appledrm.txt" ko anchor v14 entry tname kind ev args copies pick off ko_t ko_v n
+	if [[ $KPROBES_ALLOWED != 1 ]]; then
+		abort_blank "E probes skipped (no kprobes)"
+		return 0
+	fi
+	{ grep -F '[appledrm]' /proc/kallsyms || true; } > "$ks"
+	anchor=$(sym_addrs "$ks" "$E_ANCHOR")
+	v14=$(sym_addrs "$ks" "$E_V14_REF")
+	if [[ $(wc -w <<< "$anchor") -ne 1 || $(wc -w <<< "$v14") -ne 1 ]]; then
+		abort_blank "E: anchor $E_ANCHOR or $E_V14_REF not unique in kallsyms"
+		return 0
+	fi
+	ko=$(modinfo -n appledrm 2> /dev/null || true)
+	for entry in "${E_PROBES[@]}"; do
+		IFS='|' read -r tname kind ev args <<< "$entry"
+		copies=$(sym_addrs "$ks" "$tname")
+		n=$(wc -w <<< "$copies")
+		if [[ $n -ne 3 ]]; then
+			abort_blank "E: $tname has $n copies in kallsyms (expected 3)"
+			continue
+		fi
+		pick=$(tail -n 1 <<< "$copies")
+		# the v14_7 copy is the highest one; it must lie above the v13_3 anchor
+		if [[ ! $pick > $anchor ]]; then
+			abort_blank "E: highest $tname copy $pick is not above $E_ANCHOR $anchor"
+			continue
+		fi
+		# cross-check with the module file: same distance to iomfb_poweroff_v14_7_0
+		if [[ -n $ko && -r $ko ]] && command -v readelf > /dev/null; then
+			ko_t=$( { readelf -sW "$ko" | awk -v s="$tname" '$8 == s && $4 == "FUNC" { print $2 }' | sort | tail -n 1; } 2> /dev/null || true)
+			ko_v=$( { readelf -sW "$ko" | awk -v s="$E_V14_REF" '$8 == s { print $2; exit }'; } 2> /dev/null || true)
+			if [[ -n $ko_t && -n $ko_v ]]; then
+				if (( (0x$v14 - 0x$pick) != (0x$ko_v - 0x$ko_t) )); then
+					abort_blank "E: $tname runtime distance to $E_V14_REF differs from $ko"
+					continue
+				fi
+			else
+				log "E: readelf cross-check for $tname not possible"
+			fi
+		fi
+		off=$(( 0x$pick - 0x$anchor ))
+		log "E: $tname v14_7 copy at 0x$pick = $E_ANCHOR+$(hx "$off")"
+		add_probe "$kind:fay/$ev appledrm:$E_ANCHOR+$(hx "$off") $args"
+	done
+	return 0
+}
+
+# snapshot <tag>: sync() fires fay_snap; dump kernel L1/L2 pages from kcore.
+snapshot() {
+	local tag=$1 line
+	kbounded 60 sync || log "WARN: sync for snapshot $tag failed or timed out"
+	sleep 0.5
+	if [[ $STAGE2_OK == 1 ]]; then
+		line=$( { grep 'fay_snap:' "$T/trace" | tail -n 1; } 2> /dev/null || true)
+		printf '%s %s\n' "$tag" "$line" >> "$OUT/snapshots.txt"
+		log "snap $tag: $line"
+		kcore_dump "$L1_KVA" 0x4000 "$OUT/l1-$tag.bin" 0x3ff8 0x200
+		kcore_dump "$L2_KVA" 0x4000 "$OUT/l2-$tag.bin" 0x3bf8
+	fi
+	copy_debugfs "$tag"
+	save 60 "interrupts-$tag.txt" cat /proc/interrupts
+	# per-probe hit and MISS counts: a missed fay_irq/fay_dunmap would
+	# otherwise look like "the event never happened"
+	save 10 "kprobe_profile-$tag.txt" cat "$T/kprobe_profile"
+	return 0
+}
+
+copy_debugfs() {
+	local tag=$1 d f
+	for d in "$DBG"/fay-dcp/*/; do
+		[[ -d $d ]] || continue
+		for f in "$d"*; do
+			[[ -f $f ]] || continue
+			save 60 "debugfs-$tag-$(basename "$d")-$(basename "$f")" cat "$f"
+		done
+	done
+	return 0
+}
+
+save_logs() {
+	local tag=$1
+	save 60 "trace-$tag.txt" cat "$T/trace"
+	save_redacted 30 "dmesg-$tag.txt" dmesg
+	return 0
+}
+
+# write_owner_verdict <trace> <file>: who owned DVA 0x10fffdfc000 (G1).
+write_owner_verdict() {
+	local tr=$1 v="$OUT/$2"
+	{
+		echo "Owner of DVA $FAULT_DVA (16 KiB page) - from $(basename "$tr")"
+		echo "boot_id $BOOT_ID, mode $MODE, written $(date -Is)"
+		echo "dcp domain L1 KVA (stage 2): ${L1_KVA:-unknown}"
+		echo "The callback named next to an event is the last iomfb_callback of the"
+		echo "same task (pid) since that task's last dcp_recv_msg."
+		echo
+		gawk -v F="$FAULT_DVA" -v FM=0xfffdfc000 -v L1="$L1_KVA" '
+		function hexv(name,   m, v) {
+			if (match($0, "[ (]" name "=(0x)?[0-9a-fA-F]+", m)) {
+				v = substr(m[0], index(m[0], "=") + 1)
+				if (v !~ /^0x/) v = "0x" v
+				return strtonum(v)
+			}
+			return -1
+		}
+		function decv(name,   m) {
+			if (match($0, "[ (]" name "=[0-9]+", m))
+				return substr(m[0], index(m[0], "=") + 1) + 0
+			return -1
+		}
+		# raw hex string of a field; 64-bit values are compared as strings,
+		# a double (strtonum) cannot hold every bit of a kernel address
+		function hstr(name,   m) {
+			if (match($0, " " name "=(0x)?[0-9a-fA-F]+", m))
+				return substr(m[0], index(m[0], "=") + 1)
+			return ""
+		}
+		function hnorm(s) { s = tolower(s); sub(/^0x/, "", s); sub(/^0+/, "", s); return s == "" ? "0" : s }
+		function dom(   l) {
+			l = hstr("l1")
+			if (L1 == "") return "domain ? (l1=" l ", stage 2 L1 unknown)"
+			return hnorm(l) == hnorm(L1) ? "dcp domain" : "OTHER domain (l1=" l ", e.g. disp/piodma)"
+		}
+		function tpid(   m) { if (match($0, /-([0-9]+) +\[[0-9]+\]/, m)) return m[1]; return "?" }
+		function cbof(   p) { p = tpid(); return (p in cb && cb[p] != "") ? cb[p] : "(outside a callback)" }
+		function covers(a, s, x) { return a >= 0 && s > 0 && a <= x && x < a + s }
+		function ev(tag, extra) { nev++; printf "%-11s %s%s\n", tag, $0, extra }
+		BEGIN { F = strtonum(F); FM = strtonum(FM); owner = "none"; nev = 0 }
+		/ dcp_recv_msg: / { cb[tpid()] = ""; next }
+		/ iomfb_callback: / { c = $0; sub(/.*Callback /, "", c); cb[tpid()] = c; next }
+		/ dma_map_phys: / {
+			a = hexv("dma_addr"); s = decv("size")
+			if (covers(a, s, F)) {
+				c = cbof()
+				ev("MAP_PHYS", "   <= callback: " c)
+				m = ""; if (match($0, /attrs=[A-Z_|]*/)) m = substr($0, RSTART, RLENGTH)
+				owner = sprintf("dma_map_phys phys=0x%x size=%d %s, during callback %s", hexv("phys_addr"), s, m, c)
+				ownphys = hexv("phys_addr"); ownkind = "map_phys"; owncb = c
+			}
+		}
+		/ dma_unmap_phys: / { a = hexv("dma_addr"); s = decv("size"); if (covers(a, s, F)) { ev("UNMAP_PHYS", "   <= callback: " cbof()); owner = "none (unmapped)"; ownkind = "unmapped" } }
+		/ dma_alloc: / {
+			a = hexv("dma_addr"); s = decv("size")
+			if ($0 ~ /virt_addr=(0000000000000000|\(null\))/) { failed++; ev("ALLOC_FAIL", "   <= callback: " cbof()) }
+			if (covers(a, s, F)) {
+				c = cbof()
+				ev("ALLOC", "   <= callback: " c)
+				owner = sprintf("dma_alloc dma_addr=0x%x size=%d, during callback %s", a, s, c); ownkind = "alloc"; owncb = c
+			}
+		}
+		/ dma_free: / { a = hexv("dma_addr"); s = decv("size"); if (covers(a, s, F)) { ev("FREE", "   <= callback: " cbof()); owner = "none (freed)"; ownkind = "freed" } }
+		/ map: IOMMU: / { a = hexv("iova"); s = decv("size"); if (covers(a, s, F)) ev("IOMMU_MAP", "   <= domain unknown (may be piodma/disp DART)") }
+		/ unmap: IOMMU: / { a = hexv("iova"); s = decv("size"); if (covers(a, s, F)) ev("IOMMU_UNMAP", "   <= domain unknown (may be piodma/disp DART)") }
+		/ fay_dmap: / { a = hexv("iova"); s = hexv("pgsz") * hexv("cnt"); if (covers(a, s, FM) || covers(a, s, F)) ev("DART_MAP", "   <= " dom()) }
+		/ fay_dunmap: / { a = hexv("iova"); s = hexv("pgsz") * hexv("cnt"); if (covers(a, s, FM) || covers(a, s, F)) ev("DART_UNMAP", "   <= " dom()) }
+		/ fay_r41[1]: / { a = hexv("dva"); s = hexv("len"); if (covers(a, s, F)) ev("D411_RET", "") }
+		/ fay_r45[12]: / { a = hexv("dva"); s = hexv("dsz"); if (covers(a, s, F)) ev("D45x_RET", "") }
+		END {
+			print ""
+			printf "events touching the page: %d, failed dma_alloc: %d\n", nev, failed + 0
+			print "owner at the end of this trace: " owner
+			if (ownkind == "map_phys" && int(ownphys / 16384) * 16384 == strtonum("0x2d03d0000"))
+				print "=> H1 identity CONFIRMED: the page is the pmgr dashboard mapping (phys 0x2d03d0000) from " owncb
+			else if (ownkind == "map_phys")
+				print "=> page is a dma_map_resource/phys mapping of another physical address (see MAP_PHYS line)"
+			else if (ownkind == "alloc")
+				print "=> H2 candidate: the page belongs to a dma_alloc buffer (see ALLOC line and its callback)"
+			else if (ownkind == "freed" || ownkind == "unmapped")
+				print "=> the page WAS mapped and has been released again before the end of this trace"
+			else
+				print "=> H3 candidate: no Linux DMA-API mapping covers the page in this trace"
+			if (failed > 0) print "=> H4 indicator: at least one failed dma_alloc for the dcp device"
+		}' "$tr" 2>&1
+		echo
+		echo "--- stage 2 (page-table walk)"
+		cat "$OUT/stage2.txt" 2> /dev/null || echo "(stage 2 not available)"
+		echo
+		echo "--- fay_snap snapshots (pte = leaf 0x77f; expected when mapped: $EXPECT_PTE)"
+		cat "$OUT/snapshots.txt" 2> /dev/null || echo "(none)"
+		echo
+		echo "--- D411 / D451 / D452 / D454 callbacks in order (first 80)"
+		grep -E 'Callback D(411|451|452|454|574|209) ' "$tr" | head -n 80 || true
+	} > "$v" 2>&1 || true
+	log "wrote $(basename "$v"): $(grep -m1 '^=>' "$v" || echo 'no conclusion line')"
+	return 0
+}
+
+# _kv <file> <key>: value of key=... in a key=value file.
+_kv() {
+	{ sed -n "s/^$2=//p" "$1" | head -n 1; } 2> /dev/null || true
+}
+
+# write_fault_verdict <trace> [dmesg]: page-table state at the DART fault.
+# IRQ 557 is shared by dart-dcp and dart-disp0 and fay_irq/fay_irq2 fire at
+# handler entry for both, so only hits after the first blank marker
+# ("tracing_mark_write: fay-dcptest S5.") count, and of those the one closest
+# in time to the dmesg "28d30c000.iommu: translation fault" line is used
+# (trace_clock local and printk use the same clock). A Linux unmap of the
+# fault page counts only if its l1 is the dcp domain (stage 2), its range
+# covers the page, and it lies between the marker and the fault.
+write_fault_verdict() {
+	local tr=$1 dm=${2:-$OUT/dmesg-final.txt} v="$OUT/VERDICT-fault.txt"
+	local kv="$OUT/.fault-values.tmp" rep="$OUT/.fault-report.tmp" kp="$OUT/kprobe_profile-final.txt"
+	local irq irq2 pte lk1 kl1 ud uo uu dd fts dt nomarker nirq nirq2 missed note
+	[[ -r $dm ]] || dm=/dev/null
+	rm -f -- "$kv" "$rep"
+	gawk -v L1="$L1_KVA" -v DART="$DART_DCP" -v KV="$kv" '
+	function hexv(name,   m, v) {
+		if (match($0, "[ (]" name "=(0x)?[0-9a-fA-F]+", m)) {
+			v = substr(m[0], index(m[0], "=") + 1)
+			if (v !~ /^0x/) v = "0x" v
+			return strtonum(v)
+		}
+		return -1
+	}
+	function decv(name,   m) {
+		if (match($0, "[ (]" name "=[0-9]+", m))
+			return substr(m[0], index(m[0], "=") + 1) + 0
+		return -1
+	}
+	function hstr(name,   m) {
+		if (match($0, " " name "=(0x)?[0-9a-fA-F]+", m))
+			return substr(m[0], index(m[0], "=") + 1)
+		return ""
+	}
+	function hnorm(s) { s = tolower(s); sub(/^0x/, "", s); sub(/^0+/, "", s); return s == "" ? "0" : s }
+	function tts(   m) { if (match($0, / ([0-9]+\.[0-9]+): [A-Za-z0-9_]+:/, m)) return m[1] + 0; return -1 }
+	function covers(a, s, x) { return a >= 0 && s > 0 && a <= x && x < a + s }
+	function absd(x) { return x < 0 ? -x : x }
+	# index of the hit after the marker closest to the dmesg fault (first one
+	# after the marker if there is no dmesg fault line)
+	function pick(t, n,   i, b) {
+		b = 0
+		for (i = 1; i <= n; i++)
+			if (t[i] >= mk && (!b || (fts >= 0 && absd(t[i] - fts) < absd(t[b] - fts))))
+				b = i
+		return b
+	}
+	function win(t) { return t < mk ? "before-S5" : (lim >= 0 && t > lim ? "after-fault" : "S5..fault") }
+	BEGIN { F = strtonum("0x10fffdfc000"); FM = strtonum("0xfffdfc000"); mk = -1 }
+	ARGIND == 1 {
+		if (index($0, DART ": translation fault") && match($0, /^\[ *([0-9]+\.[0-9]+)\]/, m))
+			ft[++nf] = m[1] + 0
+		next
+	}
+	mk < 0 && /tracing_mark_write: fay-dcptest S5\./ { mk = tts(); next }
+	/ fay_irq: / { ni++; il[ni] = $0; it[ni] = tts(); next }
+	/ fay_irq2: / { nj++; jl[nj] = $0; jt[nj] = tts(); next }
+	/ fay_dunmap: / {
+		a = hexv("iova"); s = hexv("pgsz") * hexv("cnt")
+		if (covers(a, s, FM) || covers(a, s, F)) {
+			nu++; ul[nu] = $0; ut[nu] = tts()
+			ux[nu] = (L1 == "") ? "unknown" : (hnorm(hstr("l1")) == hnorm(L1) ? "dcp" : "other")
+		}
+		next
+	}
+	/ dma_free: | dma_unmap_phys: / {
+		a = hexv("dma_addr"); s = decv("size")
+		if (covers(a, s, F)) { nd++; dl[nd] = $0; dt[nd] = tts() }
+		next
+	}
+	END {
+		nomk = (mk < 0)
+		if (nomk) mk = 0
+		fts = -1
+		for (i = 1; i <= nf; i++) if (ft[i] >= mk) { fts = ft[i]; break }
+		bi = pick(it, ni); bj = pick(jt, nj)
+		lim = bi ? it[bi] : fts
+		ci = 0; cj = 0
+		for (i = 1; i <= ni; i++) if (it[i] >= mk) ci++
+		for (i = 1; i <= nj; i++) if (jt[i] >= mk) cj++
+		for (i = 1; i <= nu; i++)
+			if (win(ut[i]) == "S5..fault") {
+				if (ux[i] == "dcp") ud++
+				else if (ux[i] == "other") uo++
+				else uu++
+			}
+		for (i = 1; i <= nd; i++) if (win(dt[i]) == "S5..fault") dd++
+		printf "irq=%s\nirq2=%s\n", bi ? il[bi] : "", bj ? jl[bj] : "" > KV
+		printf "fts=%s\n", fts >= 0 ? sprintf("%.6f", fts) : "" > KV
+		printf "dt=%s\n", (bi && fts >= 0) ? sprintf("%.6f", absd(it[bi] - fts)) : "" > KV
+		printf "nomarker=%d\nnirq=%d\nnirq2=%d\n", nomk, ci, cj > KV
+		printf "ud=%d\nuo=%d\nuu=%d\ndd=%d\n", ud, uo, uu, dd > KV
+		close(KV)
+		printf "--- fay_irq hits after the first S5 marker: %d (first 40; * = used)\n", ci
+		k = 0
+		for (i = 1; i <= ni && k < 40; i++) if (it[i] >= mk) { k++; print (i == bi ? "* " : "  ") il[i] }
+		printf "--- fay_irq2 hits after the first S5 marker: %d (first 40; * = used)\n", cj
+		k = 0
+		for (i = 1; i <= nj && k < 40; i++) if (jt[i] >= mk) { k++; print (i == bj ? "* " : "  ") jl[i] }
+		printf "--- fay_dunmap covering the fault page, whole trace: %d (window, domain)\n", nu
+		for (i = 1; i <= nu && i <= 100; i++) printf "%-11s %-7s %s\n", win(ut[i]), ux[i], ul[i]
+		printf "--- dma_free / dma_unmap_phys covering %s (dcp device), whole trace: %d\n", "0x10fffdfc000", nd
+		for (i = 1; i <= nd && i <= 100; i++) printf "%-11s %s\n", win(dt[i]), dl[i]
+	}' "$dm" "$tr" > "$rep" 2>&1 || true
+	irq=$(_kv "$kv" irq)
+	irq2=$(_kv "$kv" irq2)
+	fts=$(_kv "$kv" fts)
+	dt=$(_kv "$kv" dt)
+	nomarker=$(_kv "$kv" nomarker)
+	nirq=$(_kv "$kv" nirq)
+	nirq2=$(_kv "$kv" nirq2)
+	ud=$(_kv "$kv" ud)
+	uo=$(_kv "$kv" uo)
+	uu=$(_kv "$kv" uu)
+	dd=$(_kv "$kv" dd)
+	[[ $ud =~ ^[0-9]+$ ]] || ud=0
+	[[ $uo =~ ^[0-9]+$ ]] || uo=0
+	[[ $uu =~ ^[0-9]+$ ]] || uu=0
+	[[ $dd =~ ^[0-9]+$ ]] || dd=0
+	pte=$(kfield "$irq2" pte)
+	lk1=$(kfield "$irq" lk1)
+	kl1=$(kfield "$irq" kl1)
+	missed=$( { awk '$1 ~ /^fay_(irq|irq2|dunmap|dmap)$/ && $3 + 0 > 0 { printf "%s%s missed %s of %s", sep, $1, $3, $2 + $3; sep = "; " }' "$kp"; } 2> /dev/null || true)
+	{
+		echo "DART fault state - from $(basename "$tr") and $(basename "$dm"), crashed=$CRASHED"
+		echo "dcp domain L1 KVA (stage 2): ${L1_KVA:-unknown}"
+		if [[ -n $missed ]]; then
+			echo "WARNING: kprobes MISSED events ($missed) - a missing fault or unmap below may be a lost event, see kprobe_profile-final.txt"
+		elif [[ ! -s $kp ]]; then
+			echo "WARNING: kprobe_profile-final.txt missing - misses cannot be ruled out"
+		fi
+		if [[ $nomarker == 1 ]]; then
+			echo "WARNING: no 'fay-dcptest S5.' marker in the trace - the whole trace was used"
+		fi
+		if [[ -n $irq && -z $fts ]]; then
+			echo "WARNING: no '$DART_DCP: translation fault' in dmesg after the marker - this fay_irq hit may be a dart-disp0 fault (IRQ 557 is shared)"
+		elif [[ -n $dt ]] && awk -v d="$dt" 'BEGIN { exit !(d > 1.0) }'; then
+			echo "WARNING: the fay_irq hit used is ${dt}s away from the dmesg fault line"
+		fi
+		echo "dmesg fault time  = ${fts:-none}  (hit used is ${dt:-?}s away; hits after marker: fay_irq ${nirq:-0}, fay_irq2 ${nirq2:-0})"
+		echo "fay_irq : ${irq:-(none)}"
+		echo "fay_irq2: ${irq2:-(none)}"
+		echo "leaf pte at fault = ${pte:-?}  (expected if mapped: $EXPECT_PTE)"
+		echo "locked L1[0x7ff]  = ${lk1:-?}"
+		echo "kernel L1[0x7ff]  = ${kl1:-?}"
+		echo "between the marker and the fault: dcp-domain unmaps of the page $ud, other-domain $uo, unknown-domain $uu, dma_free/dma_unmap_phys $dd"
+		echo
+		if [[ -z $irq ]]; then
+			echo "=> no DART fault was captured by the probes after the blank marker"
+		elif [[ -n $lk1 && -n $kl1 ]] && ! heq "$lk1" "$kl1"; then
+			echo "=> (c) the locked L1 entry differs from the kernel L1 entry at the fault"
+		elif heq "$pte" "$EXPECT_PTE"; then
+			echo "=> (a) kernel PTE valid and locked L1 == kernel L1: walker/TLB/prefetch problem"
+		elif heq "$pte" 0; then
+			if (( ud + dd > 0 )); then
+				echo "=> leaf PTE zero after a Linux unmap/free of the page in the dcp domain (H2 path, see the lists below)"
+			elif (( uu > 0 )); then
+				echo "=> leaf PTE zero; $uu unmap(s) of the page in an unknown domain (stage-2 L1 missing): (b) and H2 cannot be separated"
+			else
+				note=""
+				if (( uo > 0 )); then note=" ($uo unmap(s) in another domain do not count)"; fi
+				echo "=> (b) leaf PTE is zero without any Linux unmap of that page in the dcp domain: external writer$note"
+			fi
+		else
+			echo "=> unexpected leaf PTE value, compare l2-*.bin"
+		fi
+		echo
+		cat "$rep" 2> /dev/null
+		echo
+		echo "--- from the first blank marker: callbacks, methods, E probes, pmgr, unmaps, faults (first 300)"
+		awk '/tracing_mark_write: fay-dcptest S5\./ { on = 1 } on && /tracing_mark_write:|iomfb_callback:|iomfb_push:|fay_t[0-9]|fay_r4|fay_pmgr:|fay_irq|fay_dunmap:|fay_tlbinv:|dma_free:|dma_unmap_phys:|unmap: IOMMU/' "$tr" | head -n 300
+		echo
+		echo "--- all E probe hits"
+		grep -E 'fay_(t574|t454|t209|r411|r451|r452):' "$tr" | tail -n 100
+		echo
+		echo "--- snapshots"
+		cat "$OUT/snapshots.txt" 2> /dev/null
+		echo
+		echo "--- kprobe_profile (event, hits, misses)"
+		cat "$kp" 2> /dev/null
+	} > "$v" 2>&1 || true
+	rm -f -- "$kv" "$rep"
+	log "wrote $(basename "$v"): $(grep -m1 '^=>' "$v" || echo 'no conclusion')"
+	return 0
+}
+
+probe_health() {
+	local tr=$1 e
+	{
+		echo "hits per event in $(basename "$tr")"
+		for e in dma_map_phys dma_unmap_phys dma_alloc dma_free 'map: IOMMU' 'unmap: IOMMU' \
+			iomfb_callback iomfb_push dcp_recv_msg dcp_send_msg \
+			fay_dmap fay_dunmap fay_syncmap fay_tlbinv fay_irq fay_pmgr fay_dom fay_irq2 fay_snap \
+			fay_t574 fay_t454 fay_t209 fay_r411 fay_r451 fay_r452; do
+			printf '%-16s %s\n' "$e" "$(grep -c " $e[:]* " "$tr" 2> /dev/null || true)"
+		done
+		echo "--- kprobe_profile now (event, hits, MISSES - any miss means lost events)"
+		cat "$T/kprobe_profile" 2> /dev/null
+		echo "--- dynamic_events"
+		cat "$T/dynamic_events" 2> /dev/null
+		echo "--- enabled events"
+		cat "$T/set_event" 2> /dev/null
+	} > "$OUT/PROBES.txt" 2>&1 || true
+	return 0
+}
+
+# ---------------------------------------------------------------- S5-S7
+check_crash() {
+	local f
+	if [[ -z $OUT || ! -d $OUT ]]; then
+		return 0
+	fi
+	f="$OUT/dmesg-check.txt"
+	run_bounded 30 _save_redacted_inner dmesg-check.txt dmesg || true
+	if grep -q -e 'DCP has crashed' -e "$DART_DCP: translation fault" "$f" 2> /dev/null; then
+		CRASHED=1
+	fi
+	return 0
+}
+
+blank_cycles() {
+	local i rc
+	for (( i = 1; i <= REPEATS; i++ )); do
+		step "S5.$i" "blank $FBDEV (FB_BLANK_POWERDOWN)"
+		say "S5.$i: blanking the screen now. A black screen is expected."
+		persist
+		run_bounded 20 journalctl --sync || true
+		QUIET_CONSOLE=1
+		BLANK_TRIGGERED=1
+		IN_CYCLE=1
+		if kbounded 20 write_file "$FBDEV/blank" 4; then rc=0; else rc=$?; fi
+		log "blank write rc=$rc"
+		sleep 5
+		step "S6.$i" "post-blank capture"
+		check_crash
+		log "crashed=$CRASHED"
+		snapshot "post-$i"
+		save_logs "post-$i"
+		persist
+		step "S7.$i" "unblank"
+		if kbounded 15 write_file "$FBDEV/blank" 0; then rc=0; else rc=$?; fi
+		log "unblank write rc=$rc (EINVAL is expected after a crash)"
+		if [[ $rc != 0 && $CRASHED != 1 ]]; then
+			UNBLANK_FAILED=1
+		fi
+		sleep 3
+		check_crash
+		if [[ $rc == 0 && $CRASHED != 1 ]]; then
+			IN_CYCLE=0
+		fi
+		{ echo "cycle $i: crashed=$CRASHED unblank_rc=$rc"; cat "$FBDEV/blank" 2> /dev/null; } >> "$OUT/blank-cycles.txt" 2>&1 || true
+		persist
+		if [[ $CRASHED == 1 ]]; then
+			log "DCP crash detected in cycle $i - stopping the cycles"
+			break
+		fi
+		if [[ $UNBLANK_FAILED == 1 ]]; then
+			log "unblank failed without a crash - stopping the cycles"
+			break
+		fi
+		QUIET_CONSOLE=0
+		say "S7.$i: no crash in cycle $i"
+		sleep 5
+	done
+	return 0
+}
+
+# ---------------------------------------------------------------- S8 / S9
+teardown_probes() {
+	write_file "$T/tracing_on" 0 || true
+	if [[ -d $T/events/fay ]]; then
+		write_file "$T/events/fay/enable" 0 || true
+	fi
+	: > "$T/kprobe_events" || true
+	: > "$T/set_event" || true
+}
+
+sysrq_reboot() {
+	REBOOT_ISSUED=1
+	log "rebooting via sysrq s/u/b (no driver shutdown)"
+	kmsg "S9: sysrq reboot"
+	echo s > /proc/sysrq-trigger 2> /dev/null || true
+	sleep 3
+	echo u > /proc/sysrq-trigger 2> /dev/null || true
+	sleep 3
+	echo b > /proc/sysrq-trigger 2> /dev/null || true
+	sleep 30
+	# still alive: sysrq-b did not restart the machine; immediate reboot(2)
+	log "sysrq b had no effect - trying systemctl --force --force reboot"
+	systemctl --force --force reboot > /dev/null 2>&1 || true
+	sleep 120
+	return 0
+}
+
+# The clean reboot runs device shutdown, i.e. appledrm's own DCP power-down.
+# It is used only when the display state is known to be good: no DCP crash
+# (checked again right here, a crash can happen after the last cycle check),
+# no failed unblank, no blank/unblank cycle left unfinished, and no kernel
+# call (modprobe, blank, unblank, sync) that timed out.
+reboot_now() {
+	local how=clean
+	STEP=S9
+	check_crash
+	if [[ $CRASHED == 1 || $UNBLANK_FAILED == 1 || $IN_CYCLE == 1 || $KERNEL_STUCK == 1 ]]; then
+		how=sysrq
+	fi
+	if [[ $REBOOT_PREF == sysrq ]]; then
+		how=sysrq
+	fi
+	log "reboot method: $how (crashed=$CRASHED unblank_failed=$UNBLANK_FAILED in_cycle=$IN_CYCLE kernel_stuck=$KERNEL_STUCK${STUCK_WHAT[*]:+ [${STUCK_WHAT[*]}]} pref=$REBOOT_PREF)"
+	if [[ $how == clean ]]; then
+		run_bounded 20 teardown_probes || true
+		REBOOT_ISSUED=1
+		kmsg "S9: systemctl reboot"
+		if run_bounded 30 systemctl --no-block reboot; then
+			return 0
+		fi
+		log "systemctl reboot failed - falling back to sysrq"
+	fi
+	sysrq_reboot
+	return 0
+}
+
+finish() {
+	# from here on nothing may abort the run: the reboot must always happen
+	set +eu
+	step S8 "final capture"
+	if [[ -n $OUT && -d $OUT ]]; then
+		save_logs final
+		save 15 trace_pipe-final.txt cat "$T/trace_pipe"
+		save_redacted 60 journal-kernel.txt journalctl -k -b --no-pager -o short-monotonic
+		save_redacted 60 journal-unit.txt journalctl -b -u fay-dcptest.service --no-pager -o short-monotonic
+		save 10 dynamic_events-final.txt cat "$T/dynamic_events"
+		save 10 error_log-final.txt cat "$T/error_log"
+		save 10 kprobe_profile-final.txt cat "$T/kprobe_profile"
+		if [[ -f $OUT/trace-final.txt ]]; then
+			probe_health "$OUT/trace-final.txt"
+			if [[ $BLANK_TRIGGERED == 1 ]]; then
+				write_fault_verdict "$OUT/trace-final.txt" "$OUT/dmesg-final.txt"
+			fi
+		fi
+		rm -f -- "$OUT/.dmesg-probe.tmp"
+		{
+			echo "mode=$MODE delay=$DELAY repeats=$REPEATS"
+			echo "blank_ok=$BLANK_OK blank_triggered=$BLANK_TRIGGERED crashed=$CRASHED unblank_failed=$UNBLANK_FAILED in_cycle=$IN_CYCLE"
+			echo "kernel_stuck=$KERNEL_STUCK${STUCK_WHAT[*]:+ (timed out: ${STUCK_WHAT[*]})}"
+			echo "stage2_ok=$STAGE2_OK dart=$DART_KVA l1=$L1_KVA l2=$L2_KVA"
+			echo "abort reasons:"
+			if (( ${#ABORT_REASONS[@]} )); then printf '  - %s\n' "${ABORT_REASONS[@]}"; else echo "  (none)"; fi
+			echo "owner verdict: $(grep -m1 '^=>' "$OUT/VERDICT-owner.txt" 2> /dev/null)"
+			echo "fault verdict: $(grep -m1 '^=>' "$OUT/VERDICT-fault.txt" 2> /dev/null)"
+		} > "$OUT/SUMMARY.txt" 2>&1
+		if [[ -n $OWNER ]] && id "$OWNER" > /dev/null 2>&1; then
+			chown -R "$OWNER": "$OUT" 2> /dev/null || true
+		fi
+		chmod -R a+rX "$OUT" 2> /dev/null || true
+	fi
+	run_bounded 30 journalctl --sync || true
+	kbounded 60 sync || true
+	reboot_now
+	return 0
+}
+
+# wait_delay: the configured delay, with a console line every minute so a
+# long wait is never mistaken for a hang.
+wait_delay() {
+	local left=$DELAY chunk
+	if (( left <= 0 )); then
+		return 0
+	fi
+	say "waiting ${DELAY}s before the next step - this is normal, do not touch (a line appears every minute)"
+	while (( left > 0 )); do
+		chunk=$(( left < 60 ? left : 60 ))
+		sleep "$chunk"
+		left=$(( left - chunk ))
+		if (( left > 0 )); then
+			say "still waiting, ${left}s left - this is normal, do not touch"
+		fi
+	done
+	return 0
+}
+
+# ---------------------------------------------------------------- main
+main() {
+	STEP=S0
+	disarm_first
+
+	exec 9> /run/fay-dcptest.lock
+	if ! flock -n 9; then
+		log "another fay-dcptest instance is running - exiting"
+		REBOOT_ISSUED=1
+		exit 0
+	fi
+
+	BOOT_ID=$(cat /proc/sys/kernel/random/boot_id)
+	OUT="$STATE_DIR/$BOOT_ID"
+	parse_armed
+	# the watchdog first: everything after this point may block (it needs
+	# only the OUT path for its marker file, not the folder itself)
+	start_watchdog
+	mkdir -p "$OUT"
+	chmod 0755 "$STATE_DIR" "$OUT" || true
+	init_redact
+	log "fay-dcptest start: mode=$MODE delay=$DELAY repeats=$REPEATS reboot=$REBOOT_PREF out=$OUT watchdog=${WATCHDOG_SECS}s"
+	record_env
+	inhibit_sleep
+	persist
+	say "DCP test started (mode $MODE). Please do not touch the machine; it reboots by itself."
+
+	if [[ $(uname -r) != "$EXPECT_KREL" ]]; then
+		abort_blank "running kernel $(uname -r) is not $EXPECT_KREL"
+		finish
+		return 0
+	fi
+	read_config
+	ensure_kallsyms_visible
+	check_build
+	persist
+
+	step S1 "tracing setup (A dma/iommu tracepoints, B dcp :mod: cache, C kprobes)"
+	setup_tracing
+	persist
+
+	step S2 "load appledrm and wait for the panel"
+	say "S2: loading the display driver"
+	load_appledrm
+	persist
+
+	step S3 "save boot trace, stage-2 and E probes, pre-snapshot, owner verdict"
+	save_logs S3
+	stage2
+	e_probes
+	snapshot pre
+	save 30 dynamic_events-S3.txt cat "$T/dynamic_events"
+	save_logs S3-pre
+	write_owner_verdict "$OUT/trace-S3-pre.txt" VERDICT-owner.txt
+	probe_health "$OUT/trace-S3-pre.txt"
+	run_bounded 30 journalctl --sync || true
+	persist
+	say "S3: boot data saved. $(grep -m1 '^=>' "$OUT/VERDICT-owner.txt" 2> /dev/null || true)"
+
+	wait_delay
+	step S3b "late snapshot after the delay"
+	snapshot late
+	save_logs late
+	write_owner_verdict "$OUT/trace-late.txt" VERDICT-owner-late.txt
+	persist
+
+	if [[ $MODE == full ]]; then
+		if [[ $BLANK_OK == 1 && -n $FBDEV ]]; then
+			blank_cycles
+		else
+			abort_blank "full mode requested but setup was incomplete - screen NOT blanked"
+			printf '%s\n' "${ABORT_REASONS[@]}" > "$OUT/ABORT-no-blank.txt" 2>/dev/null || true
+			say "setup incomplete - the screen is NOT blanked in this boot (see ABORT-no-blank.txt)"
+		fi
+	else
+		log "dry mode: no blank"
+	fi
+	say "saving results and rebooting"
+	finish
+	return 0
+}
+
+main "$@"

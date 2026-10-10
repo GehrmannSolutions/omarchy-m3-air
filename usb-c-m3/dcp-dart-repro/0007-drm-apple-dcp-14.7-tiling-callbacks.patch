@@ -1,0 +1,24 @@
+From: fay-dcp local build
+Subject: [PATCH 0007] drm/apple: iomfb: DCP 14.7 tiling callbacks (PR #607, 62bd293c)
+
+Backport of AsahiLinux/linux PR #607 commit 62bd293c: register the DCP 14.7
+callbacks D115 get_tiling_state and D116 set_tiling_state (answered with
+false). The previous commented-out entries used the 13.x numbers 114/115.
+PR #608 (DCP 14.7 support for t8122) depends on this; it was missing from
+the 7.2.2-fay-dcp build of 2026-10-03.
+
+Apply with: patch -p1 (tree root of asahi-wip-7.2 + PR #608).
+
+--- a/drivers/gpu/drm/apple/iomfb_v14_7.c
++++ b/drivers/gpu/drm/apple/iomfb_v14_7.c
+@@ -58,8 +58,8 @@ static const iomfb_cb_handler cb_handler
+ 	[111] = trampoline_true, /* create_iomfb_service */
+ 	[112] = trampoline_create_backlight_service,
+ 	[113] = trampoline_true, /* create_nvram_service? */
+-	//[114] = trampoline_get_tiling_state,
+-	//[115] = trampoline_false, /* set_tiling_state */
++	[115] = trampoline_get_tiling_state,
++	[116] = trampoline_false, /* set_tiling_state */
+ 	[121] = dcpep_cb_boot_1, /* is_dark_boot */
+ 	[122] = trampoline_false, /* is_dark_boot / is_waking_from_hibernate*/
+ 	[123] = trampoline_false,

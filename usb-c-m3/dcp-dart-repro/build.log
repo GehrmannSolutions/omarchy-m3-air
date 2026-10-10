@@ -1,0 +1,40 @@
+make[1]: Entering directory '/home/mg/.cache/fay-build/wip/drivers/gpu/drm/apple'
+  CC [M]  apple_drv.o
+  CC [M]  afk.o
+  CC [M]  dcp.o
+  CC [M]  dcp_backlight.o
+  CC [M]  iomfb.o
+  CC [M]  dptxep.o
+  CC [M]  parser.o
+  CC [M]  systemep.o
+  CC [M]  audio.o
+  CC [M]  av.o
+  CC [M]  connector.o
+  CC [M]  ibootep.o
+  CC [M]  iomfb_v12_3.o
+  CC [M]  iomfb_v13_3.o
+  CC [M]  iomfb_v14_7.o
+  CC [M]  epic/dpavservep.o
+  CC [M]  plane.o
+  CC [M]  trace.o
+  LD [M]  appledrm.o
+  MODPOST Module.symvers
+  CC [M]  .module-common.o
+  CC [M]  appledrm.mod.o
+  LD [M]  appledrm.ko
+make[1]: Leaving directory '/home/mg/.cache/fay-build/wip/drivers/gpu/drm/apple'
+
+real	0m3.002s
+user	0m12.626s
+sys	0m0.626s
+
+=== verification (appended after make, 2026-10-10) ===
+command: cd <wip> && make ARCH=arm64 -j8 M=drivers/gpu/drm/apple modules
+compiler: gcc (GCC) 16.1.1 20260430
+warnings in this build: 0
+W=1 build of the patched sources: 0 warnings (the unpatched sources: 0)
+patches 0007 + 0008 applied to the .fay-orig files reproduce the built sources byte for byte
+modinfo -F vermagic: 7.2.2-fay-dcp SMP preempt mod_unload aarch64
+modinfo -F parm (fay): fay_cb_log:fay debug: log IOMFB callbacks with in/out hex dumps (0=off, 1=all, 2=all but D589/D591 (default)) (int)
+sha256 appledrm.ko: 439b0c05f7fda6c55078119125569cac096958788b6cfa4fb112ed9ae5021b15
+size appledrm.ko: 9904528 bytes

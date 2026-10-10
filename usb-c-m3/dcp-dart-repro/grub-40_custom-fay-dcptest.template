@@ -1,0 +1,22 @@
+#!/bin/sh
+exec tail -n +3 $0
+# fay-dcptest: GRUB entry for the DCP/DART test boot. Installed by install.sh as
+# /etc/grub.d/42_fay-dcptest (40_custom format) with the placeholders filled
+# from /proc/cmdline and grub-probe; removed by uninstall.sh.
+# Modelled on 'Omarchy Linux, with Linux fay-dcp' without 'quiet splash'.
+# It is never the default: arm.sh selects it for exactly one boot (grub-reboot)
+# and the test script clears next_entry again as its first action.
+# panic=10: the kernel has CONFIG_PANIC_TIMEOUT=0, so without it a panic would
+# hang with a dead screen. A panic reboot skips driver shutdown.
+menuentry 'fay-dcp DCP test' --class omarchy --class gnu-linux --class gnu --class os $menuentry_id_option 'fay-dcptest' {
+	load_video
+	set gfxpayload=keep
+	insmod gzio
+	insmod part_gpt
+	insmod fat
+	search --no-floppy --fs-uuid --set=root __BOOT_FS_UUID__
+	echo	'Loading Linux fay-dcp (DCP test boot) ...'
+	linux	/vmlinuz-fay-dcp root=UUID=__ROOT_UUID__ rw rootflags=subvol=@  cryptdevice=UUID=__CRYPT_UUID__:root:allow-discards loglevel=3 systemd.unit=multi-user.target modprobe.blacklist=appledrm fay.dcptest=1 log_buf_len=16M panic=10
+	echo	'Loading initial ramdisk ...'
+	initrd	/initramfs-fay-dcp.img
+}
