@@ -1,0 +1,29 @@
+--- a/drivers/iommu/apple-dart.c
++++ b/drivers/iommu/apple-dart.c
+@@ -818,10 +818,22 @@
+ 	for (i = 0; i < dart->hw->ttbr_count; i++)
+ 		dev_info(dart->dev, "fay-regs: [%s] sid %d ttbr[%d] %#x\n", why,
+ 			 sid, i, readl(dart->regs + DART_TTBR(dart, sid, i)));
+-	for (i = 0x100; i < 0x200; i += 0x10)
+-		dev_info(dart->dev, "fay-regs: [%s] +%#05x %08x %08x %08x %08x\n",
+-			 why, i, readl(dart->regs + i), readl(dart->regs + i + 4),
+-			 readl(dart->regs + i + 8), readl(dart->regs + i + 12));
++	{
++		/* patch 0012: params/TLB, errors, protect/tunables, hwrev2 regions */
++		static const u32 fay_ranges[][2] = {
++			{ 0x000, 0x0b0 }, { 0x100, 0x200 }, { 0x200, 0x240 },
++			{ 0x300, 0x360 }, { 0x400, 0x420 },
++		};
++		int r;
++
++		for (r = 0; r < ARRAY_SIZE(fay_ranges); r++)
++			for (i = fay_ranges[r][0]; i < fay_ranges[r][1]; i += 0x10)
++				dev_info(dart->dev, "fay-regs: [%s] +%#05x %08x %08x %08x %08x\n",
++					 why, i, readl(dart->regs + i),
++					 readl(dart->regs + i + 4),
++					 readl(dart->regs + i + 8),
++					 readl(dart->regs + i + 12));
++	}
+ 
+ 	/* software walk from the hardware TTBR[0] (2-level, 16K granule) */
+ 	ttbr = readl(dart->regs + DART_TTBR(dart, sid, 0));
