@@ -8,6 +8,8 @@ exec tail -n +3 $0
 # and the test script clears next_entry again as its first action.
 # panic=10: the kernel has CONFIG_PANIC_TIMEOUT=0, so without it a panic would
 # hang with a dead screen. A panic reboot skips driver shutdown.
+# apple_dart.fay_pool_*: patch 0009 test - dcp_dart (SID 5) lower page tables
+# come from its firmware pt-region (region-id 18), as on macOS.
 menuentry 'fay-dcp DCP test' --class omarchy --class gnu-linux --class gnu --class os $menuentry_id_option 'fay-dcptest' {
 	load_video
 	set gfxpayload=keep
@@ -16,7 +18,7 @@ menuentry 'fay-dcp DCP test' --class omarchy --class gnu-linux --class gnu --cla
 	insmod fat
 	search --no-floppy --fs-uuid --set=root __BOOT_FS_UUID__
 	echo	'Loading Linux fay-dcp (DCP test boot) ...'
-	linux	/vmlinuz-fay-dcp root=UUID=__ROOT_UUID__ rw rootflags=subvol=@  cryptdevice=UUID=__CRYPT_UUID__:root:allow-discards loglevel=3 systemd.unit=multi-user.target modprobe.blacklist=appledrm fay.dcptest=1 log_buf_len=16M panic=10
+	linux	/vmlinuz-fay-dcp root=UUID=__ROOT_UUID__ rw rootflags=subvol=@  cryptdevice=UUID=__CRYPT_UUID__:root:allow-discards loglevel=3 systemd.unit=multi-user.target modprobe.blacklist=appledrm fay.dcptest=1 log_buf_len=16M panic=10 apple_dart.fay_pool_dev=28d30c000.iommu apple_dart.fay_pool_pa=0x103ffec4000 apple_dart.fay_pool_size=0x40000
 	echo	'Loading initial ramdisk ...'
 	initrd	/initramfs-fay-dcp.img
 }
