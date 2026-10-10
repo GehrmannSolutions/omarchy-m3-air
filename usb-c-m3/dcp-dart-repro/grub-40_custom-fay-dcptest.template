@@ -18,7 +18,7 @@ menuentry 'fay-dcp DCP test' --class omarchy --class gnu-linux --class gnu --cla
 	insmod fat
 	search --no-floppy --fs-uuid --set=root __BOOT_FS_UUID__
 	echo	'Loading Linux fay-dcp (DCP test boot) ...'
-	linux	/vmlinuz-fay-dcp root=UUID=__ROOT_UUID__ rw rootflags=subvol=@  cryptdevice=UUID=__CRYPT_UUID__:root:allow-discards cryptkey=rootfs:/etc/cryptsetup-keys.d/root.key loglevel=3 systemd.unit=multi-user.target modprobe.blacklist=appledrm fay.dcptest=1 log_buf_len=16M panic=10 apple_dart.fay_pool_dev=28d30c000.iommu apple_dart.fay_pool_pa=0x103ffec4000 apple_dart.fay_pool_size=0x40000 appledrm.fay_bw_shadow=1 appledrm.fay_apf_dump=1
+	linux	/vmlinuz-fay-dcp root=UUID=__ROOT_UUID__ rw rootflags=subvol=@  cryptdevice=UUID=__CRYPT_UUID__:root:allow-discards cryptkey=rootfs:/etc/cryptsetup-keys.d/root.key loglevel=3 systemd.unit=multi-user.target modprobe.blacklist=appledrm fay.dcptest=1 log_buf_len=16M panic=10 apple_dart.fay_pool_dev=28d30c000.iommu apple_dart.fay_pool_pa=0x103ffec4000 apple_dart.fay_pool_size=0x40000 appledrm.fay_apf_dump=1
 	echo	'Loading initial ramdisk ...'
 	initrd	/initramfs-fay-dcp.img
 }

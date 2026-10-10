@@ -1,0 +1,48 @@
+--- a/drivers/gpu/drm/apple/dcp.c
++++ b/drivers/gpu/drm/apple/dcp.c
+@@ -75,15 +75,20 @@
+ module_param(fay_apf_dump, bool, 0444);
+ MODULE_PARM_DESC(fay_apf_dump, "fay debug: dump the dart-dcp APF block once (test only)");
+ 
+-static void fay_apf_dump_once(struct apple_dcp *dcp)
++static void fay_apf_dump_once(struct apple_dcp *dcp, const char *why)
+ {
+ 	static bool done;
+ 	void __iomem *apf;
+ 	unsigned int i;
+ 
+-	if (!fay_apf_dump || done)
++	/* patch 0018: once at the first debugfs sweep, and at every poff/crash */
++	if (!fay_apf_dump)
+ 		return;
+-	done = true;
++	if (!strcmp(why, "debugfs")) {
++		if (done)
++			return;
++		done = true;
++	}
+ 	apf = ioremap(0x28d310000, 0x4000);
+ 	if (!apf) {
+ 		dev_err(dcp->dev, "fay-apf: ioremap failed\n");
+@@ -93,8 +98,8 @@
+ 		void __iomem *sl = apf + i * 0x40;
+ 
+ 		dev_info(dcp->dev,
+-			 "fay-apf: slice %2u ctrl %#010x r4 %#010x start %#010x%08x end %#010x%08x r20 %#010x\n",
+-			 i, readl(sl), readl(sl + 4), readl(sl + 0xc), readl(sl + 8),
++			 "fay-apf: [%s] slice %2u ctrl %#010x r4 %#010x start %#010x%08x end %#010x%08x r20 %#010x\n",
++			 why, i, readl(sl), readl(sl + 4), readl(sl + 0xc), readl(sl + 8),
+ 			 readl(sl + 0x14), readl(sl + 0x10), readl(sl + 0x20));
+ 	}
+ 	iounmap(apf);
+@@ -447,8 +452,8 @@
+ 	/* patch 0011: optional DART TLB flush right before setPowerState(0) */
+ 	if (!strcmp(why, "poff") || !strcmp(why, "sleep"))
+ 		apple_dart_fay_flush(dcp->dev, why);
+-	if (!strcmp(why, "debugfs"))
+-		fay_apf_dump_once(dcp);
++	if (!strcmp(why, "debugfs") || !strcmp(why, "poff") || !strcmp(why, "crash"))
++		fay_apf_dump_once(dcp, why);
+ 	/* the DART's own view (registers + walk from the hardware TTBR) */
+ 	apple_dart_fay_dump(dcp->dev, FAY_DVA_FAULT_ADDR, why);
+ 	dom = iommu_get_domain_for_dev(dcp->dev);
