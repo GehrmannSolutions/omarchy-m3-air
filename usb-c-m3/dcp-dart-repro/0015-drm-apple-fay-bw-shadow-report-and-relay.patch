@@ -1,6 +1,6 @@
 --- a/drivers/gpu/drm/apple/dcp.c
 +++ b/drivers/gpu/drm/apple/dcp.c
-@@ -60,6 +60,50 @@
+@@ -60,6 +60,41 @@
  bool fay_bw_shadow;
  module_param(fay_bw_shadow, bool, 0444);
  MODULE_PARM_DESC(fay_bw_shadow, "fay debug: map a RAM shadow page for the bw-scratch register (test only)");
@@ -21,7 +21,6 @@
 +{
 +	u32 *w = fay_bw_shadow_va;
 +	unsigned int i, nz = 0, off = dcp->disp_bw_scratch_offset;
-+	void __iomem *reg;
 +
 +	if (!w)
 +		return;
@@ -35,18 +34,10 @@
 +	dev_info(dcp->dev, "fay-bw-shadow: [%s] %u non-zero words, dashboard word (+%#x) = %#010x\n",
 +		 why, nz, off, READ_ONCE(w[off / 4]));
 +
-+	reg = ioremap(dcp->disp_bw_scratch_res.start,
-+		      resource_size(&dcp->disp_bw_scratch_res));
-+	if (!reg)
-+		return;
-+	dev_info(dcp->dev, "fay-bw-shadow: [%s] real pmgr dashboard %pa+%#x = %#010x\n",
-+		 why, &dcp->disp_bw_scratch_res.start, off, readl(reg + off));
-+	if (fay_bw_relay && !strcmp(why, "poff-done")) {
-+		writel(READ_ONCE(w[off / 4]), reg + off);
-+		dev_info(dcp->dev, "fay-bw-relay: wrote %#010x -> pmgr dashboard, read back %#010x\n",
-+			 READ_ONCE(w[off / 4]), readl(reg + off));
-+	}
-+	iounmap(reg);
++	/*
++	 * No AP access to the real pmgr dashboard here: reading it from the AP
++	 * (patch 0015 v1) hard-reset the machine ~55 s later, twice.
++	 */
 +}
  MODULE_PARM_DESC(show_notch, "Use the full display height and shows the notch");
  
