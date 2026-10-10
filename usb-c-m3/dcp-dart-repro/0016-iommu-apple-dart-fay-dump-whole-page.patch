@@ -1,0 +1,29 @@
+--- a/drivers/iommu/apple-dart.c
++++ b/drivers/iommu/apple-dart.c
+@@ -835,6 +835,26 @@
+ 					 readl(dart->regs + i + 12));
+ 	}
+ 
++	/*
++	 * patch 0016: once, outside the IRQ, dump every non-zero 16-byte row of
++	 * the whole DART page (looking for the APF slices of dapf-instance-0).
++	 */
++	if (!strcmp(why, "debugfs")) {
++		static bool fay_page_dumped;
++
++		if (!fay_page_dumped) {
++			fay_page_dumped = true;
++			for (i = 0; i < 0x4000; i += 0x10) {
++				u32 a = readl(dart->regs + i), b = readl(dart->regs + i + 4);
++				u32 c = readl(dart->regs + i + 8), d = readl(dart->regs + i + 12);
++
++				if (a | b | c | d)
++					dev_info(dart->dev, "fay-page: +%#06x %08x %08x %08x %08x\n",
++						 i, a, b, c, d);
++			}
++		}
++	}
++
+ 	/* software walk from the hardware TTBR[0] (2-level, 16K granule) */
+ 	ttbr = readl(dart->regs + DART_TTBR(dart, sid, 0));
+ 	if (!(ttbr & dart->hw->ttbr_valid)) {
