@@ -1,3 +1,4 @@
+# WITHDRAWN 2026-10-10: reading the whole dart-dcp page hard-reset the machine ~40 s later (boot 9888dd1f). Do not apply.
 --- a/drivers/iommu/apple-dart.c
 +++ b/drivers/iommu/apple-dart.c
 @@ -835,6 +835,26 @@
