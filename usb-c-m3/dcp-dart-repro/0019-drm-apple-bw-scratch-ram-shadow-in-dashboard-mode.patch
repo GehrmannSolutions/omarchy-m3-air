@@ -1,0 +1,57 @@
+--- a/drivers/gpu/drm/apple/dcp.c
++++ b/drivers/gpu/drm/apple/dcp.c
+@@ -57,6 +57,17 @@
+  * pmgr bw-scratch ("dashboard") page for D411 map_reg, to test whether the
+  * DART refuses DCP writes to that MMIO page at power-down.
+  */
++/*
++ * patch 0019: on DCP firmware that uses "Dashboard" RT-bandwidth mode (a
++ * bw-scratch register but no bw-doorbell, e.g. t8122), the firmware's only
++ * write through the D411 map_reg mapping of the pmgr dashboard page is a
++ * 64-bit zero at power-off, and dart-dcp rejects it (FILL_REGION|NO_PTE),
++ * which crashes the DCP. Hand the firmware a RAM page instead.
++ */
++bool bw_scratch_shadow = true;
++module_param(bw_scratch_shadow, bool, 0444);
++MODULE_PARM_DESC(bw_scratch_shadow, "Map a RAM page instead of the bw-scratch register in Dashboard mode (default: true)");
++
+ bool fay_bw_shadow;
+ module_param(fay_bw_shadow, bool, 0444);
+ MODULE_PARM_DESC(fay_bw_shadow, "fay debug: map a RAM shadow page for the bw-scratch register (test only)");
+--- a/drivers/gpu/drm/apple/iomfb_template.c
++++ b/drivers/gpu/drm/apple/iomfb_template.c
+@@ -477,7 +477,11 @@
+ 		extern bool fay_bw_shadow;
+ 		dma_addr_t dva;
+ 
+-		if (fay_bw_shadow && dcp->disp_bw_scratch_index &&
++		extern bool bw_scratch_shadow;
++
++		if ((fay_bw_shadow ||
++		     (bw_scratch_shadow && !dcp->disp_bw_doorbell_index)) &&
++		    dcp->disp_bw_scratch_index &&
+ 		    req->index == dcp->disp_bw_scratch_index) {
+ 			extern void *fay_bw_shadow_va;
+ 			extern size_t fay_bw_shadow_size;
+@@ -487,8 +491,8 @@
+ 
+ 			if (!shadow)
+ 				dva = DMA_MAPPING_ERROR;
+-			/* canary: shows whether the firmware writes, even zeros */
+-			if (shadow)
++			/* canary (debug only): shows whether the firmware writes, even zeros */
++			if (shadow && fay_bw_shadow)
+ 				memset(shadow, 0xff, resource_size(rsrc));
+ 			fay_bw_shadow_va = shadow;
+ 			fay_bw_shadow_size = resource_size(rsrc);
+--- a/drivers/gpu/drm/apple/iomfb.c
++++ b/drivers/gpu/drm/apple/iomfb.c
+@@ -278,7 +278,7 @@
+  *         logged as a "fay-cb-ack:" line when the deferred dcp_ack() is sent.
+  * sync=-1: no handler for this tag, the callback is not acked (unchanged).
+  */
+-static int fay_cb_log = 2;
++static int fay_cb_log;
+ module_param(fay_cb_log, int, 0644);
+ MODULE_PARM_DESC(fay_cb_log,
+ 		 "fay debug: log IOMFB callbacks with in/out hex dumps (0=off, 1=all, 2=all but D589/D591 (default))");

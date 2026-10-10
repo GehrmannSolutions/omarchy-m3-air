@@ -7,6 +7,8 @@
 #   sudo ./arm.sh dry  [delay_seconds]   trace + owner verdict, never blanks
 #   sudo ./arm.sh full [delay_seconds]   as dry, then blanks the screen (repro)
 #   sudo ./arm.sh disarm                 undo an arm that has not booted yet
+#   sudo ./arm.sh desktop                boot the normal 'with Linux fay-dcp'
+#                                        desktop entry once (no test script)
 #
 # delay_seconds (default 20, max 3600): wait after the boot capture before the
 # late snapshot and, in full mode, before the first blank. Use 360 to match
@@ -85,6 +87,20 @@ grubenv_check_pending() {
 [[ $EUID -eq 0 ]] || die "please run with sudo: sudo $0 $*"
 MODE=${1:-}
 [[ -n $MODE ]] || usage
+
+if [[ $MODE == desktop ]]; then
+	# one normal desktop boot of the fay-dcp kernel (daily-use test); no armed file,
+	# so fay-dcptest.service stays skipped. GRUB clears next_entry by itself.
+	[[ $(uname -r) == "$DAILY_KREL" ]] || die "run arm.sh desktop from the daily kernel $DAILY_KREL"
+	[[ ! -f $ARMED ]] || die "a test boot is armed; run 'sudo $0 disarm' first"
+	[[ -f $STATE/grubenv-ok ]] || die "the one-time GRUB check has not passed yet"
+	DESK="Advanced options for Omarchy Linux>Omarchy Linux, with Linux fay-dcp"
+	grep -q "menuentry 'Omarchy Linux, with Linux fay-dcp'" "$GRUBCFG" || die "desktop fay-dcp entry missing in $GRUBCFG"
+	grub-reboot "$DESK"
+	sync -f "$GRUBENV"
+	info "next boot (once): $DESK. Then: systemctl reboot"
+	exit 0
+fi
 
 if [[ $MODE == disarm ]]; then
 	rm -f -- "$ARMED" "$GE_TEST"
