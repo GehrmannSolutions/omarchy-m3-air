@@ -1,0 +1,81 @@
+--- a/drivers/gpu/drm/apple/dcp.c
++++ b/drivers/gpu/drm/apple/dcp.c
+@@ -66,6 +66,40 @@
+  * with fay_bw_relay=1, forward the dashboard word (bw-scratch offset) to the
+  * real pmgr register after the firmware has finished powering down.
+  */
++/*
++ * fay patch 0017: read-only dump of dart-dcp's APF block (DAPF at 0x28d310000,
++ * from the ADT /defaults pmap-io-ranges; no ADT node declares it) once, at the
++ * first debugfs sweep while the DCP is up. Slices: 0x40 stride.
++ */
++bool fay_apf_dump;
++module_param(fay_apf_dump, bool, 0444);
++MODULE_PARM_DESC(fay_apf_dump, "fay debug: dump the dart-dcp APF block once (test only)");
++
++static void fay_apf_dump_once(struct apple_dcp *dcp)
++{
++	static bool done;
++	void __iomem *apf;
++	unsigned int i;
++
++	if (!fay_apf_dump || done)
++		return;
++	done = true;
++	apf = ioremap(0x28d310000, 0x4000);
++	if (!apf) {
++		dev_err(dcp->dev, "fay-apf: ioremap failed\n");
++		return;
++	}
++	for (i = 0; i < 16; i++) {
++		void __iomem *sl = apf + i * 0x40;
++
++		dev_info(dcp->dev,
++			 "fay-apf: slice %2u ctrl %#010x r4 %#010x start %#010x%08x end %#010x%08x r20 %#010x\n",
++			 i, readl(sl), readl(sl + 4), readl(sl + 0xc), readl(sl + 8),
++			 readl(sl + 0x14), readl(sl + 0x10), readl(sl + 0x20));
++	}
++	iounmap(apf);
++}
++
+ bool fay_bw_relay;
+ module_param(fay_bw_relay, bool, 0444);
+ MODULE_PARM_DESC(fay_bw_relay, "fay debug: relay the shadow dashboard word to pmgr after power-off (test only)");
+@@ -81,13 +115,14 @@
+ 	if (!w)
+ 		return;
+ 	for (i = 0; i < fay_bw_shadow_size / 4; i++) {
+-		if (!READ_ONCE(w[i]))
++		/* the shadow starts filled with 0xffffffff (canary) */
++		if (READ_ONCE(w[i]) == 0xffffffff)
+ 			continue;
+ 		if (nz++ < 16)
+ 			dev_info(dcp->dev, "fay-bw-shadow: [%s] +%#06x = %#010x\n",
+ 				 why, i * 4, READ_ONCE(w[i]));
+ 	}
+-	dev_info(dcp->dev, "fay-bw-shadow: [%s] %u non-zero words, dashboard word (+%#x) = %#010x\n",
++	dev_info(dcp->dev, "fay-bw-shadow: [%s] %u words written by the firmware, dashboard word (+%#x) = %#010x\n",
+ 		 why, nz, off, READ_ONCE(w[off / 4]));
+ 
+ 	/*
+@@ -412,6 +447,8 @@
+ 	/* patch 0011: optional DART TLB flush right before setPowerState(0) */
+ 	if (!strcmp(why, "poff") || !strcmp(why, "sleep"))
+ 		apple_dart_fay_flush(dcp->dev, why);
++	if (!strcmp(why, "debugfs"))
++		fay_apf_dump_once(dcp);
+ 	/* the DART's own view (registers + walk from the hardware TTBR) */
+ 	apple_dart_fay_dump(dcp->dev, FAY_DVA_FAULT_ADDR, why);
+ 	dom = iommu_get_domain_for_dev(dcp->dev);
+--- a/drivers/gpu/drm/apple/iomfb_template.c
++++ b/drivers/gpu/drm/apple/iomfb_template.c
+@@ -487,6 +487,9 @@
+ 
+ 			if (!shadow)
+ 				dva = DMA_MAPPING_ERROR;
++			/* canary: shows whether the firmware writes, even zeros */
++			if (shadow)
++				memset(shadow, 0xff, resource_size(rsrc));
+ 			fay_bw_shadow_va = shadow;
+ 			fay_bw_shadow_size = resource_size(rsrc);
+ 			dev_info(dcp->dev,
