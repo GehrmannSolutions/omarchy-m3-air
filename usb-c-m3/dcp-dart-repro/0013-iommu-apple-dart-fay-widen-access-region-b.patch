@@ -1,0 +1,41 @@
+--- a/drivers/iommu/apple-dart.c
++++ b/drivers/iommu/apple-dart.c
+@@ -886,6 +886,8 @@
+  */
+ static bool fay_flush_poff;
+ module_param(fay_flush_poff, bool, 0444);
++static unsigned long fay_rb_start;
++module_param(fay_rb_start, ulong, 0444);
+ 
+ void apple_dart_fay_flush(struct device *master, const char *why);
+ void apple_dart_fay_flush(struct device *master, const char *why)
+@@ -894,11 +896,28 @@
+ 	struct apple_dart_stream_map *map;
+ 	int r1, r2;
+ 
+-	if (!fay_flush_poff || !cfg || !cfg->stream_maps[0].dart)
++	if (!cfg || !cfg->stream_maps[0].dart)
+ 		return;
+ 	map = &cfg->stream_maps[0];
+ 	if (map->dart->hw->type != DART_T8110)
+ 		return;
++
++	/*
++	 * patch 0013: with apple_dart.fay_rb_start=<PA>>12>, lower the start of
++	 * access region B (0x320, end at 0x328, enable at 0x318; values from the
++	 * ADT dart-tunables) so that it covers that page, e.g. the pmgr dashboard.
++	 */
++	if (fay_rb_start) {
++		u32 before = readl(map->dart->regs + 0x320);
++
++		writel((u32)fay_rb_start, map->dart->regs + 0x320);
++		dev_info(map->dart->dev,
++			 "fay-region: [%s] B start %#x -> wrote %#lx, read back %#x (ctl %#x end %#x)\n",
++			 why, before, fay_rb_start, readl(map->dart->regs + 0x320),
++			 readl(map->dart->regs + 0x318), readl(map->dart->regs + 0x328));
++	}
++	if (!fay_flush_poff)
++		return;
+ 	r1 = apple_dart_t8110_hw_tlb_command(map, DART_T8110_TLB_CMD_OP_FLUSH_ALL);
+ 	r2 = apple_dart_t8110_hw_tlb_command(map, DART_T8110_TLB_CMD_OP_FLUSH_SID);
+ 	dev_info(map->dart->dev, "fay-flush: [%s] FLUSH_ALL rc=%d FLUSH_SID rc=%d tlbcmd %#x\n",
