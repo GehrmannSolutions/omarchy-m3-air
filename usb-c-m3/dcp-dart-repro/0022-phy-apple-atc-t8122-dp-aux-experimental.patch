@@ -1,0 +1,127 @@
+--- a/drivers/phy/apple/atc.c
++++ b/drivers/phy/apple/atc.c
+@@ -1370,11 +1370,110 @@
+ 	}
+ }
+ 
++/*
++ * fay: experimental DP AUX power-up for t8122. On t8122 the AUX block sits
++ * inside ACIOPHY (macOS names ACIOPHY_AUX_TOP_BLK_* and ACIOPHY_AUX_SHM_BLK_*)
++ * at core+0x16000 / core+0x16400; tunable_AUX_TOP values (0x08 = 0x8,
++ * 0x0c low bits 0) were verified there by read-only peeks. The bit layout of
++ * AUX_SHM AUX_PWR_REG is a guess from its idle value 0x2a0 and the macOS
++ * sequence order (SLEEP_B_SML_IN, _OV, SLEEP_B_BIG_IN, _OV, CLAMP_EN, _OV):
++ *   variant 1: value bits 4/6/8, override bits 5/7/9
++ *   variant 2: override bits 4/6/8, value bits 5/7/9
++ * The parameter is writable at runtime; it takes effect on the next DP mode
++ * switch (monitor replug). 0 keeps the old behaviour (no AUX on t8122).
++ */
++static int fay_t8122_aux = 1;
++module_param(fay_t8122_aux, int, 0644);
++MODULE_PARM_DESC(fay_t8122_aux, "t8122 DP AUX power-up variant (0 off, 1, 2)");
++
++#define FAY_T8122_AUX_TOP 0x16000
++#define FAY_T8122_AUX_SHM 0x16400
++#define FAY_T8122_AUX_PWR_REG (FAY_T8122_AUX_SHM + 0x0)
++
++static void fay_t8122_aux_dump(struct apple_atcphy *atcphy, const char *why)
++{
++	void __iomem *c = atcphy->regs.core;
++
++	dev_info(atcphy->dev,
++		 "fay-aux %s: TOP %08x %08x %08x %08x SHM %08x %08x %08x %08x DPCTRL0 %08x\n", why,
++		 readl(c + FAY_T8122_AUX_TOP), readl(c + FAY_T8122_AUX_TOP + 4),
++		 readl(c + FAY_T8122_AUX_TOP + 8), readl(c + FAY_T8122_AUX_TOP + 0xc),
++		 readl(c + FAY_T8122_AUX_SHM), readl(c + FAY_T8122_AUX_SHM + 4),
++		 readl(c + FAY_T8122_AUX_SHM + 8), readl(c + FAY_T8122_AUX_SHM + 0xc),
++		 readl(c + ACIOPHY_LANE_DP_CFG_BLK_TX_DP_CTRL0));
++}
++
++static void fay_t8122_aux_bits(int variant, u32 *sml, u32 *big, u32 *clamp, u32 *ov)
++{
++	int v = variant == 2 ? 1 : 0, o = variant == 2 ? 0 : 1;
++
++	*sml = BIT(4 + v);
++	*big = BIT(6 + v);
++	*clamp = BIT(8 + v);
++	*ov = BIT(4 + o) | BIT(6 + o) | BIT(8 + o);
++}
++
++static void fay_t8122_enable_dp_aux(struct apple_atcphy *atcphy)
++{
++	u32 sml, big, clamp, ov;
++	int variant = fay_t8122_aux;
++
++	fay_t8122_aux_dump(atcphy, "before");
++	if (variant != 1 && variant != 2)
++		return;
++	fay_t8122_aux_bits(variant, &sml, &big, &clamp, &ov);
++
++	/* DP pixel clocks, same block and names as on t8103 (ACIOPHY_LANE_DP_CFG_BLK) */
++	core_set32(atcphy, ACIOPHY_LANE_DP_CFG_BLK_TX_DP_CTRL0, DPTXPHY_PMA_LANE_RESET_N);
++	core_set32(atcphy, ACIOPHY_LANE_DP_CFG_BLK_TX_DP_CTRL0, DPTXPHY_PMA_LANE_RESET_N_OV);
++	core_mask32(atcphy, ACIOPHY_LANE_DP_CFG_BLK_TX_DP_CTRL0, DPRX_PCLK_SELECT,
++		    FIELD_PREP(DPRX_PCLK_SELECT, 1));
++	core_set32(atcphy, ACIOPHY_LANE_DP_CFG_BLK_TX_DP_CTRL0, DPRX_PCLK_ENABLE);
++	core_mask32(atcphy, ACIOPHY_LANE_DP_CFG_BLK_TX_DP_CTRL0, DPTX_PCLK1_SELECT,
++		    FIELD_PREP(DPTX_PCLK1_SELECT, 1));
++	core_set32(atcphy, ACIOPHY_LANE_DP_CFG_BLK_TX_DP_CTRL0, DPTX_PCLK1_ENABLE);
++	core_mask32(atcphy, ACIOPHY_LANE_DP_CFG_BLK_TX_DP_CTRL0, DPTX_PCLK2_SELECT,
++		    FIELD_PREP(DPTX_PCLK2_SELECT, 1));
++	core_set32(atcphy, ACIOPHY_LANE_DP_CFG_BLK_TX_DP_CTRL0, DPTX_PCLK2_ENABLE);
++
++	/* aciophy_aux_init order: clamp while waking, SML, BIG, then release clamp */
++	core_set32(atcphy, FAY_T8122_AUX_PWR_REG, ov | clamp);
++	core_set32(atcphy, FAY_T8122_AUX_PWR_REG, sml);
++	udelay(10);
++	core_set32(atcphy, FAY_T8122_AUX_PWR_REG, big);
++	udelay(10);
++	core_clear32(atcphy, FAY_T8122_AUX_PWR_REG, clamp);
++
++	/* tunable_AUX_TOP from the ADT */
++	core_mask32(atcphy, FAY_T8122_AUX_TOP + 0x08, 0x38, 0x08);
++	core_mask32(atcphy, FAY_T8122_AUX_TOP + 0x0c, 0x1f, 0x00);
++
++	atcphy->dp_link_rate = -1;
++	fay_t8122_aux_dump(atcphy, "after");
++}
++
++static void fay_t8122_disable_dp_aux(struct apple_atcphy *atcphy)
++{
++	u32 sml, big, clamp, ov;
++	int variant = fay_t8122_aux;
++
++	if (variant != 1 && variant != 2)
++		return;
++	fay_t8122_aux_bits(variant, &sml, &big, &clamp, &ov);
++	/* aciophy_aux_shutdown order: CLAMP_EN, SLEEP_B_BIG_IN, SLEEP_B_SML_IN */
++	core_set32(atcphy, FAY_T8122_AUX_PWR_REG, ov | clamp);
++	core_clear32(atcphy, FAY_T8122_AUX_PWR_REG, big);
++	udelay(10);
++	core_clear32(atcphy, FAY_T8122_AUX_PWR_REG, sml);
++	udelay(10);
++}
++
+ static void atcphy_enable_dp_aux(struct apple_atcphy *atcphy)
+ {
+-	/* FIXME */
+-	if (atcphy->hw->gen == ATCPHY_GENERATION_T8122)
++	if (atcphy->hw->gen == ATCPHY_GENERATION_T8122) {
++		fay_t8122_enable_dp_aux(atcphy);
+ 		return;
++	}
+ 
+ 	core_set32(atcphy, ACIOPHY_LANE_DP_CFG_BLK_TX_DP_CTRL0, DPTXPHY_PMA_LANE_RESET_N);
+ 	core_set32(atcphy, ACIOPHY_LANE_DP_CFG_BLK_TX_DP_CTRL0, DPTXPHY_PMA_LANE_RESET_N_OV);
+@@ -1428,8 +1527,9 @@
+ 
+ static void atcphy_disable_dp_aux(struct apple_atcphy *atcphy)
+ {
+-	/* FIXME */
+-	if (atcphy->hw->gen != ATCPHY_GENERATION_T8122) {
++	if (atcphy->hw->gen == ATCPHY_GENERATION_T8122)
++		fay_t8122_disable_dp_aux(atcphy);
++	else {
+ 		set32(atcphy->regs.lpdptx + LPDPTX_AUX_CONTROL, LPDPTX_AUX_PWN_DOWN);
+ 		set32(atcphy->regs.lpdptx + LPDPTX_AUX_CFG_BLK_AUX_CTRL, LPDPTX_BLK_AUX_CTRL_PWRDN);
+ 		set32(atcphy->regs.lpdptx + LPDPTX_AUX_CONTROL, LPDPTX_AUX_CLAMP_EN);

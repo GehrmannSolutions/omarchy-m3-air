@@ -1,6 +1,24 @@
 --- a/arch/arm64/boot/dts/apple/t8122.dtsi
 +++ b/arch/arm64/boot/dts/apple/t8122.dtsi
-@@ -1625,6 +1625,14 @@
+@@ -1262,13 +1262,15 @@
+ 			iommus = <&dcpext_dart 5 0x8 0x00000000 0x7 0xffff0000>;
+ 			phandle = <&dcpext>;
+ 
+-			reg-names = "coproc", "disp-0", "disp-1", "disp-2", "disp-3";
++			/* fay: disp-1 (0x318800000) was missing; ADT dispext0 has 6 ranges */
++			reg-names = "coproc", "disp-0", "disp-1", "disp-2", "disp-3", "disp-4";
+ 			reg = <0x3 0x1ac00000 0x0 0x4000>,
+ 			      <0x3 0x18000000 0x0 0x690000>,
++			      <0x3 0x18800000 0x0 0x690000>,
+ 			      <0x3 0x19320000 0x0 0x4000>,
+ 			      <0x3 0x19344000 0x0 0x4000>,
+ 			      <0x3 0x1a800000 0x0 0x800000>;
+-			apple,bw-scratch = <&pmgr_dcp 0 4 0x910>;
++			apple,bw-scratch = <&pmgr_dcp 0 5 0x910>;
+ 			apple,iomfb-surfaces = <1 1 0 1>;
+ 			power-domains = <&ps_dispext_cpu>;
+ 			resets = <&ps_dispext_cpu>;
+@@ -1625,6 +1627,14 @@
  			power-domains = <&ps_atc0_usb>;
  		};
  
@@ -15,7 +33,7 @@
  		usb4_1_mbox: mailbox@b01108000 {
  			compatible = "apple,t8122-asc-mailbox",
  				"apple,asc-mailbox-v4";
-@@ -1791,6 +1799,14 @@
+@@ -1791,6 +1801,14 @@
  			mode-switch;
  			power-domains = <&ps_atc1_usb>;
  		};
