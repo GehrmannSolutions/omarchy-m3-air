@@ -1,0 +1,12 @@
+# Kernel config for USB-C on 7.2.2-fay-dcp (MacBook Air M3, t8122).
+# The WIP device tree links each Type-C connector to its USB4 ACIO block
+# (cio@701ac0000, cio@b01ac0000), and each ACIO block to the CIO reset
+# controller. Without these drivers fw_devlink keeps the PD controllers
+# spmi 1-0a and 1-0c waiting for a supplier forever: no port1/port2, no
+# USB data. Charging still works, the SMC negotiates it on its own.
+# Apply in the build tree:
+#   scripts/kconfig/merge_config.sh -m .config <this file> && make olddefconfig
+# All three are modules, so vmlinux does not change.
+CONFIG_USB4=m
+CONFIG_USB4_APPLE_SOC=m
+CONFIG_RESET_APPLE_CIO=m

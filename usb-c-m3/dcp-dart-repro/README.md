@@ -22,6 +22,7 @@ Technical checks: `probes-verification.md`.
 | `fay-dcptest.service` | Starts the script, but only in a test boot. |
 | `grub-40_custom-fay-dcptest.template` | The extra GRUB menu entry "fay-dcp DCP test". |
 | `0007-…patch`, `0008-…patch`, `build*.log` | The instrumented display driver (made separately). |
+| `config-usb-c.fragment` | Kernel options the WIP device tree needs for USB-C (see Notes). |
 
 ## Before you start
 
@@ -243,7 +244,7 @@ until the new GRUB menu has passed all checks and is on disk.
 - The test script loads the display driver with `fay_cb_log=1`, so every
   firmware callback is logged. A normal desktop boot of the "with Linux
   fay-dcp" entry uses the driver's default (2), which leaves out the two
-  callbacks that come with every frame.
+  callbacks that come with every frame. (Since 2026-10-10 the default is 0.)
 - The dry run ends with a normal reboot. During a normal shutdown, the
   display driver itself also powers the display controller down, so a DCP
   crash message at shutdown in the dry run is not a problem. The script uses
@@ -251,3 +252,10 @@ until the new GRUB menu has passed all checks and is on disk.
   good (crash, failed or unfinished blank, a driver call that hung).
 - The test boot uses `loglevel=3`, so kernel messages do not flood the text
   console. The full kernel log is still saved.
+- USB-C on 7.2.2-fay-dcp needs `config-usb-c.fragment` (USB4, Apple ACIO,
+  CIO reset, all as modules). Without them the PD controllers `spmi 1-0a`
+  and `1-0c` wait for the ACIO supplier forever (`devices_deferred`), so only
+  `port0` exists and no USB device can work. Charging is not affected. With
+  the modules the ACIO driver only registers itself; it powers the block up
+  only for a USB4/Thunderbolt partner. A power-only charger gives no USB
+  data role, so no xHCI appears until a USB device is plugged in.
