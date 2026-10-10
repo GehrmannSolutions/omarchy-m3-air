@@ -259,3 +259,8 @@ until the new GRUB menu has passed all checks and is on disk.
   the modules the ACIO driver only registers itself; it powers the block up
   only for a USB4/Thunderbolt partner. A power-only charger gives no USB
   data role, so no xHCI appears until a USB device is plugged in.
+- The USB-C PHY patches `../patches/0005-…` and `0006-…` (pipehandler lock
+  retry, WARN scope in `atcphy_mux_set`) apply to the 7.2.2 tree too (offsets
+  only). Without 0005 a stick unplug logs "Pipehandler lock not acked" /
+  "Failed to lock pipehandler"; `phy-apple-atc.ko` is also in the fay-dcp
+  initramfs, so rebuild it after installing the module.
