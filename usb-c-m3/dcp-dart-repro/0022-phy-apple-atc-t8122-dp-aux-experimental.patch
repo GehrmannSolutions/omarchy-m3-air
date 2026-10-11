@@ -1,6 +1,6 @@
 --- a/drivers/phy/apple/atc.c
 +++ b/drivers/phy/apple/atc.c
-@@ -1370,11 +1370,110 @@
+@@ -1370,11 +1370,169 @@
  	}
  }
  
@@ -47,6 +47,52 @@
 +	*ov = BIT(4 + o) | BIT(6 + o) | BIT(8 + o);
 +}
 +
++/*
++ * fay: experimental AUX configuration, the t8103 LPDPTX AUX settings mapped by
++ * offset onto AUX_TOP (= old AUX_CFG block) and AUX_SHM (old SHM_CFG block):
++ *   1: AUX_CTRL PWRDN=0, RXOFFSET=3; MARGIN RXOFFSET_EN=0, TXSWING=12;
++ *      SHM+4 SEL_LF_DATA, SHM+8 PHYS_ADJ=5|OV
++ *   2: as 1 with SHM+4/SHM+8 swapped
++ *   3: AUX_TOP part only
++ *   4: AUX_TOP part, SEL_LF_DATA and PHYS_ADJ=5|OV in both SHM+4 and SHM+8
++ */
++static int fay_t8122_auxcfg;
++module_param(fay_t8122_auxcfg, int, 0644);
++MODULE_PARM_DESC(fay_t8122_auxcfg, "t8122 experimental AUX config set (0 none, 1-6)");
++
++static int fay_t8122_clk;
++module_param(fay_t8122_clk, int, 0644);
++MODULE_PARM_DESC(fay_t8122_clk, "t8122: also enable PLL_COMMON wait bit and CIO3PLL PCLK/REFCLK for DP (0/1)");
++
++static void fay_t8122_aux_cfg(struct apple_atcphy *atcphy)
++{
++	int cfg = fay_t8122_auxcfg;
++	u32 reg0 = FAY_T8122_AUX_SHM + 4, reg1 = FAY_T8122_AUX_SHM + 8;
++
++	if (cfg == 5 || cfg == 6) {
++		/* candidates for ACIOPHY_AUX_TOP_BLK_AUX_CTRL.PWRDN: bit 13, bits 1+13 */
++		core_clear32(atcphy, FAY_T8122_AUX_TOP, cfg == 5 ? BIT(13) : BIT(13) | BIT(1));
++		dev_info(atcphy->dev, "fay-aux: applied auxcfg %d, AUX_CTRL %08x\n", cfg,
++			 readl(atcphy->regs.core + FAY_T8122_AUX_TOP));
++		return;
++	}
++	if (cfg < 1 || cfg > 4)
++		return;
++
++	core_mask32(atcphy, FAY_T8122_AUX_TOP, 0x03c00010, 0x00c00000);
++	core_mask32(atcphy, FAY_T8122_AUX_TOP + 0xc, 0x7e0, 0x300);
++	if (cfg == 2)
++		swap(reg0, reg1);
++	if (cfg == 1 || cfg == 2) {
++		core_set32(atcphy, reg0, BIT(15));
++		core_mask32(atcphy, reg1, GENMASK(22, 20), FIELD_PREP(GENMASK(22, 20), 5) | BIT(19));
++	} else if (cfg == 4) {
++		core_mask32(atcphy, reg0, GENMASK(22, 20), BIT(15) | FIELD_PREP(GENMASK(22, 20), 5) | BIT(19));
++		core_mask32(atcphy, reg1, GENMASK(22, 20), BIT(15) | FIELD_PREP(GENMASK(22, 20), 5) | BIT(19));
++	}
++	dev_info(atcphy->dev, "fay-aux: applied auxcfg %d\n", cfg);
++}
++
 +static void fay_t8122_enable_dp_aux(struct apple_atcphy *atcphy)
 +{
 +	u32 sml, big, clamp, ov;
@@ -82,6 +128,19 @@
 +	core_mask32(atcphy, FAY_T8122_AUX_TOP + 0x08, 0x38, 0x08);
 +	core_mask32(atcphy, FAY_T8122_AUX_TOP + 0x0c, 0x1f, 0x00);
 +
++	fay_t8122_aux_cfg(atcphy);
++
++	if (fay_t8122_clk) {
++		/* t8103 sets these for DP AUX / DP clocks; skipped for t8122 so far */
++		core_set32(atcphy, ACIOPHY_PLL_COMMON_CTRL,
++			   ACIOPHY_PLL_WAIT_FOR_CMN_READY_BEFORE_RESET_EXIT);
++		core_set32(atcphy, CIO3PLL_CLK_CTRL, CIO3PLL_CLK_PCLK_EN);
++		core_set32(atcphy, CIO3PLL_CLK_CTRL, CIO3PLL_CLK_REFCLK_EN);
++		dev_info(atcphy->dev, "fay-aux: clk PLL_COMMON %08x CIO3PLL_CLK %08x\n",
++			 readl(atcphy->regs.core + ACIOPHY_PLL_COMMON_CTRL),
++			 readl(atcphy->regs.core + CIO3PLL_CLK_CTRL));
++	}
++
 +	atcphy->dp_link_rate = -1;
 +	fay_t8122_aux_dump(atcphy, "after");
 +}
@@ -113,7 +172,7 @@
  
  	core_set32(atcphy, ACIOPHY_LANE_DP_CFG_BLK_TX_DP_CTRL0, DPTXPHY_PMA_LANE_RESET_N);
  	core_set32(atcphy, ACIOPHY_LANE_DP_CFG_BLK_TX_DP_CTRL0, DPTXPHY_PMA_LANE_RESET_N_OV);
-@@ -1428,8 +1527,9 @@
+@@ -1428,8 +1586,9 @@
  
  static void atcphy_disable_dp_aux(struct apple_atcphy *atcphy)
  {
