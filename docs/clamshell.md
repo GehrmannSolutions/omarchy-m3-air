@@ -44,7 +44,7 @@ progress), the device tree from that set in boot.bin ([../boot/](../boot/)), and
   closed laptop the moment it counts no external display. The lid-policy helper takes the lid
   switch from logind and waits 10 s before it locks and suspends.
 
-### Test results (test kernel r11 + lid-policy)
+### Test results (test kernels r11/r12 + lid-policy)
 
 | Test | Result |
 |---|---|
@@ -53,9 +53,10 @@ progress), the device tree from that set in boot.bin ([../boot/](../boot/)), and
 | Lid closed, ultrawide plugged into the rear port as well → `dcpext`, both displays with a picture | ✅ |
 | Lid open → panel back after 33–173 ms, front display waits, rear display stays | ✅ |
 | 5 close/open cycles with both displays | ✅ 5/5, front display on the internal pipe ~2.5 s after closing |
-| Lid open, rear display waits, lid closed (r11) | ❌ front display moved, rear display not offered `dcpext` until replugged → fixed in r12 (0023), not yet tested |
-| Front display on `dcpext`, lid closed, rear display arrives (move) | 🟡 move works; with lid-policy not yet re-tested |
-| Suspend/resume with the lid closed, boot with the lid closed | ⏳ open |
+| Lid open, rear display waits, lid closed | ❌ r11 (rear display not offered `dcpext` until replugged) → ✅ r12: front display to the internal pipe after ~2.5 s, rear display takes `dcpext` after ~5 s, no suspend |
+| Front display on `dcpext`, lid closed (nothing moves), rear display arrives → move | ✅ r12, ~3 s without an external display bridged by lid-policy |
+| Suspend with the lid closed and both displays, wake by opening the lid | ✅ r12: locked before suspend, panel and rear display back at once, front display waits (lid open). A USB keyboard cannot wake the Mac from s2idle, so a resume with the lid still closed cannot be tested |
+| Boot with the lid closed, both displays plugged in | ✅ r12: panel never powered, rear display on `dcpext`, front display on the internal pipe |
 
 ### What went wrong on the way (and why the design looks like this)
 
@@ -75,12 +76,12 @@ progress), the device tree from that set in boot.bin ([../boot/](../boot/)), and
 
 ### Open items
 
-- Re-test the move (front display already on `dcpext`) with lid-policy running; suspend/resume and
-  boot with the lid closed.
-- r12 (0023) fixes two faults seen with r11: a path meant for boot ("before a compositor started")
-  ran on every lid close, because its compositor check never found the DRM device on this machine;
-  and a rear display waiting for `dcpext` was not offered it when the lid closed. Not yet tested on
-  hardware.
+- After a resume, the two ports renegotiate and whichever display comes back first gets `dcpext`;
+  with the lid open the other one waits (once the front display got it although the rear display
+  had it before the suspend).
 - A late power-off after a quick unplug/replug of the rear display can still drop the new
-  connection.
+  connection (seen on r7, diagnostics in the test kernels).
+- Not specific to the lid-closed work: when the desktop blanks the screens (DPMS off, e.g. on the
+  lock screen), the internal panel goes black but keeps its backlight on. This has been so since
+  the first Omarchy start on this Mac.
 - Patches without `Signed-off-by`; no release yet.

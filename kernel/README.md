@@ -36,8 +36,8 @@ through both USB-C ports of the J613 (MacBook Air 13" M3).
 Eleven more patches on top of `patches/` that let the **internal** display pipeline drive a second
 external display on the left-front port while the lid is closed, as macOS does
 (background and test results: [../docs/clamshell.md](../docs/clamshell.md)). They are **unsigned
-work in progress** (no `Signed-off-by` yet), tested on one machine with test kernels (`r11`, 2026-10-13;
-`r12` adds 0023 and is not tested on hardware yet), and not part of a release.
+work in progress** (no `Signed-off-by` yet), tested on one machine with the test kernel `r12` (2026-10-13/14: all lid-closed tests
+passed, see the docs), and not part of a release.
 
 | # | What |
 |---|---|
@@ -60,10 +60,9 @@ tree**, so put 0013 into every kernel you might boot first. Use it together with
 [../desktop/lid-policy/](../desktop/lid-policy/): without it logind suspends the closed laptop while
 a display moves between pipelines.
 
-Open items: test r12 (0023) on hardware; the move of a front display that already sits on `dcpext`
-(0020) with the lid policy running; suspend/resume with the lid closed; booting with the lid closed;
-a late power-off after a quick unplug/replug of the rear display can still drop the new connection;
-the 3440x1440 test display renegotiates once after every plug.
+Open items: after a resume the display that comes back first gets `dcpext`; a late power-off after
+a quick unplug/replug of the rear display can still drop the new connection; the 3440x1440 test
+display renegotiates once after every plug.
 
 ## Building
 
