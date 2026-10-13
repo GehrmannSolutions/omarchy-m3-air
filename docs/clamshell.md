@@ -84,4 +84,9 @@ progress), the device tree from that set in boot.bin ([../boot/](../boot/)), and
 - Not specific to the lid-closed work: when the desktop blanks the screens (DPMS off, e.g. on the
   lock screen), the internal panel goes black but keeps its backlight on. This has been so since
   the first Omarchy start on this Mac.
+- Booting with the lid closed: the external displays show nothing until the desktop starts (first
+  picture when Hyprland comes up). Boot loader, early kernel console and a disk-encryption
+  password prompt are not visible on them, so with an encrypted disk open the lid to type the
+  password. Showing them early would need external display support before the desktop (in m1n1 /
+  the boot loader, or a console on the external pipeline in the initramfs).
 - Patches without `Signed-off-by`; no release yet.

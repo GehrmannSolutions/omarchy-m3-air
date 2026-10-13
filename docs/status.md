@@ -32,3 +32,5 @@ display. "Rear" = rear-left USB-C port, "front" = left-front USB-C port.
 - Omarchy sometimes misses a lid-open event: [desktop/lid-open-safety](../desktop/lid-open-safety/).
 - When the desktop blanks the screens (DPMS off, e.g. on the lock screen), the internal panel goes
   black but keeps its backlight on (since the first Omarchy start on this Mac).
+- Booting with the lid closed: nothing is shown on external displays before the desktop starts, so a
+  disk-encryption password prompt is not visible; open the lid to type it.
