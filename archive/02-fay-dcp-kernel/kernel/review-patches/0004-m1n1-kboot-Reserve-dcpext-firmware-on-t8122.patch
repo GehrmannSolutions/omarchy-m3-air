@@ -1,0 +1,43 @@
+From a9cd6e0beabc0823bf149378ab36cfb05377693d Mon Sep 17 00:00:00 2001
+From: Marius Gehrmann <marius@gehrmann.solutions>
+Date: Sun, 11 Oct 2026 17:29:01 +0200
+Subject: [PATCH 4/7] m1n1: kboot: Reserve dcpext firmware on t8122
+
+dcpext stays disabled on t8122 because dt_set_display() only calls
+dt_reserve_dcpext_firmware() for t8112 and t602x. Add t8122 so the
+dcpext ASC firmware is reserved and the node is enabled, as on t8112.
+
+Like t8112, no separate dcpext carveout is added. On J613 the
+firmware reservation already covers both dcpext regions with the same
+PA and size: asc-firmware@103e0564000 (16 MiB) = region 74 and
+asc-firmware@103e1564000 (3 MiB) = region 73 (dcpext __DATA). Its
+iommu-addresses include the dart-dcpext vm-base (0x100_0000_0000);
+a dcpext0 carveout from the region table only duplicates these
+ranges, without the vm-base, and the kernel warns that they overlap.
+
+Tested on MacBook Air M3 (J613) on current main, together with
+AsahiLinux/linux PR #607: an external DP monitor on the left-back
+USB-C port comes up at 1920x1080, and the overlap warning seen with
+a dcpext0 carveout is gone.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_017YMqWu7A3VwEYtHaA1TusK
+---
+ m1n1/src/kboot.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/m1n1/src/kboot.c b/m1n1/src/kboot.c
+index de9e3c7..f10bbee 100644
+--- a/m1n1/src/kboot.c
++++ b/m1n1/src/kboot.c
+@@ -2061,6 +2061,7 @@ static int dt_set_display(void)
+      * if the reservation fails allowing basic operation with just dcp.
+      */
+     if (!fdt_node_check_compatible(dt, 0, "apple,t8112") ||
++        !fdt_node_check_compatible(dt, 0, "apple,t8122") ||
+         !fdt_node_check_compatible(dt, 0, "apple,t6020") ||
+         !fdt_node_check_compatible(dt, 0, "apple,t6021") ||
+         !fdt_node_check_compatible(dt, 0, "apple,t6022"))
+-- 
+2.56.0
+

@@ -1,0 +1,530 @@
+--- drivers/gpu/drm/apple/dcp.c	2026-10-11 19:39:06.509008966 +0200
++++ ~/.cache/fay-build/wip/drivers/gpu/drm/apple/dcp.c	2026-10-10 14:30:38.951667402 +0200
+@@ -6,6 +6,7 @@
+ #include <linux/clk.h>
+ #include <linux/completion.h>
+ #include <linux/component.h>
++#include <linux/debugfs.h>
+ #include <linux/delay.h>
+ #include <linux/dma-mapping.h>
+ #include <linux/gpio/consumer.h>
+@@ -18,6 +19,8 @@
+ #include <linux/of_address.h>
+ #include <linux/of_device.h>
+ #include <linux/of_platform.h>
++#include <linux/seq_file.h>
++#include <linux/sizes.h>
+ #include <linux/slab.h>
+ #include <linux/soc/apple/rtkit.h>
+ #include <linux/string.h>
+@@ -48,6 +51,101 @@
+ 
+ static bool show_notch;
+ module_param(show_notch, bool, 0644);
++
++/*
++ * fay test (patch 0014): hand the firmware a RAM shadow page instead of the
++ * pmgr bw-scratch ("dashboard") page for D411 map_reg, to test whether the
++ * DART refuses DCP writes to that MMIO page at power-down.
++ */
++/*
++ * patch 0019: on DCP firmware that uses "Dashboard" RT-bandwidth mode (a
++ * bw-scratch register but no bw-doorbell, e.g. t8122), the firmware's only
++ * write through the D411 map_reg mapping of the pmgr dashboard page is a
++ * 64-bit zero at power-off, and dart-dcp rejects it (FILL_REGION|NO_PTE),
++ * which crashes the DCP. Hand the firmware a RAM page instead.
++ */
++bool bw_scratch_shadow = true;
++module_param(bw_scratch_shadow, bool, 0444);
++MODULE_PARM_DESC(bw_scratch_shadow, "Map a RAM page instead of the bw-scratch register in Dashboard mode (default: true)");
++
++bool fay_bw_shadow;
++module_param(fay_bw_shadow, bool, 0444);
++MODULE_PARM_DESC(fay_bw_shadow, "fay debug: map a RAM shadow page for the bw-scratch register (test only)");
++
++/*
++ * fay patch 0015: observe what the firmware writes into the shadow page and,
++ * with fay_bw_relay=1, forward the dashboard word (bw-scratch offset) to the
++ * real pmgr register after the firmware has finished powering down.
++ */
++/*
++ * fay patch 0017: read-only dump of dart-dcp's APF block (DAPF at 0x28d310000,
++ * from the ADT /defaults pmap-io-ranges; no ADT node declares it) once, at the
++ * first debugfs sweep while the DCP is up. Slices: 0x40 stride.
++ */
++bool fay_apf_dump;
++module_param(fay_apf_dump, bool, 0444);
++MODULE_PARM_DESC(fay_apf_dump, "fay debug: dump the dart-dcp APF block once (test only)");
++
++static void fay_apf_dump_once(struct apple_dcp *dcp, const char *why)
++{
++	static bool done;
++	void __iomem *apf;
++	unsigned int i;
++
++	/* patch 0018: once at the first debugfs sweep, and at every poff/crash */
++	if (!fay_apf_dump)
++		return;
++	if (!strcmp(why, "debugfs")) {
++		if (done)
++			return;
++		done = true;
++	}
++	apf = ioremap(0x28d310000, 0x4000);
++	if (!apf) {
++		dev_err(dcp->dev, "fay-apf: ioremap failed\n");
++		return;
++	}
++	for (i = 0; i < 16; i++) {
++		void __iomem *sl = apf + i * 0x40;
++
++		dev_info(dcp->dev,
++			 "fay-apf: [%s] slice %2u ctrl %#010x r4 %#010x start %#010x%08x end %#010x%08x r20 %#010x\n",
++			 why, i, readl(sl), readl(sl + 4), readl(sl + 0xc), readl(sl + 8),
++			 readl(sl + 0x14), readl(sl + 0x10), readl(sl + 0x20));
++	}
++	iounmap(apf);
++}
++
++bool fay_bw_relay;
++module_param(fay_bw_relay, bool, 0444);
++MODULE_PARM_DESC(fay_bw_relay, "fay debug: relay the shadow dashboard word to pmgr after power-off (test only)");
++void *fay_bw_shadow_va;
++size_t fay_bw_shadow_size;
++
++void fay_bw_shadow_report(struct apple_dcp *dcp, const char *why);
++void fay_bw_shadow_report(struct apple_dcp *dcp, const char *why)
++{
++	u32 *w = fay_bw_shadow_va;
++	unsigned int i, nz = 0, off = dcp->disp_bw_scratch_offset;
++
++	if (!w)
++		return;
++	for (i = 0; i < fay_bw_shadow_size / 4; i++) {
++		/* the shadow starts filled with 0xffffffff (canary) */
++		if (READ_ONCE(w[i]) == 0xffffffff)
++			continue;
++		if (nz++ < 16)
++			dev_info(dcp->dev, "fay-bw-shadow: [%s] +%#06x = %#010x\n",
++				 why, i * 4, READ_ONCE(w[i]));
++	}
++	dev_info(dcp->dev, "fay-bw-shadow: [%s] %u words written by the firmware, dashboard word (+%#x) = %#010x\n",
++		 why, nz, off, READ_ONCE(w[off / 4]));
++
++	/*
++	 * No AP access to the real pmgr dashboard here: reading it from the AP
++	 * (patch 0015 v1) hard-reset the machine ~55 s later, twice.
++	 */
++}
+ MODULE_PARM_DESC(show_notch, "Use the full display height and shows the notch");
+ 
+ bool hdmi_audio;
+@@ -248,12 +346,383 @@
+ 	}
+ }
+ 
++/*
++ * fay: DART fault instrumentation (debug only, no functional change).
++ *
++ * fay_dcp_record_map() remembers {tag, index, pa, size, dva} of every D411
++ * map_reg and D452 map_physical mapping handed to the firmware, in a ring
++ * that keeps the newest FAY_MAX_REGMAPS records.
++ *
++ * fay_dcp_sweep() walks the dcp->dev IOMMU domain over 0x10ffe000000 ..
++ * 0x10fffffffff (DART L1 slot 0x7ff) in 16 KiB steps with
++ * iommu_iova_to_phys() and logs every non-zero translation. Pages that are
++ * contiguous in both DVA and PA are printed as one "map" line, so every
++ * translation is still recoverable. It also logs the translation of
++ * 0x10fffdfc000 and 0x10fffdfc908 even when zero, every recorded D411/D452
++ * DVA (each 16K page the range touches) against its expected PA, and the
++ * memdesc table. Prefix "fay-sweep:".
++ * It runs right before setPowerState(0) (14.7 only), in dcp_rtk_crashed()
++ * and on every read of /sys/kernel/debug/fay-dcp/<dev>/sweep (output then
++ * goes to the file instead of the kernel log).
++ *
++ * dcp_rtk_crashed() keeps a kmemdup() copy of each RTKit crashlog as
++ * /sys/kernel/debug/fay-dcp/<dev>/crashlog (crashlog.1 .. for later ones).
++ */
++#define FAY_SWEEP_START		0x10ffe000000ULL
++#define FAY_SWEEP_END		0x11000000000ULL	/* exclusive */
++#define FAY_SWEEP_STEP		SZ_16K
++#define FAY_DVA_FAULT_PAGE	0x10fffdfc000ULL
++#define FAY_DVA_FAULT_ADDR	0x10fffdfc908ULL
++
++static struct dentry *fay_dbgfs_root;
++
++#define fay_out(dcp, m, fmt, ...)					\
++	do {								\
++		if (m)							\
++			seq_printf(m, fmt, ##__VA_ARGS__);		\
++		else							\
++			dev_info((dcp)->dev, fmt, ##__VA_ARGS__);	\
++	} while (0)
++
++void fay_dcp_record_map(struct apple_dcp *dcp, u32 tag, u32 index, u64 pa,
++			u64 size, u64 dva)
++{
++	struct fay_dcp_debug *fay = &dcp->fay;
++	unsigned int n = fay->nr_regmaps;
++	struct fay_regmap *r;
++
++	/*
++	 * Only called from the ordered RTKit workqueue: single writer. The
++	 * table is a ring, so the newest mappings (the live ones at a crash)
++	 * are always kept and the oldest are overwritten.
++	 */
++	r = &fay->regmaps[n % FAY_MAX_REGMAPS];
++	/* invalidate the slot for concurrent debugfs readers first */
++	WRITE_ONCE(r->seq, 0);
++	smp_wmb();
++	r->tag = tag;
++	r->index = index;
++	r->pa = pa;
++	r->size = size;
++	r->dva = dva;
++	/* Publish the entry, then the new count. */
++	smp_store_release(&r->seq, n + 1);
++	smp_store_release(&fay->nr_regmaps, n + 1);
++}
++
++/* Copy record @nr (1-based) out of the ring; false if it was overwritten. */
++static bool fay_regmap_get(struct fay_dcp_debug *fay, unsigned int nr,
++			   struct fay_regmap *out)
++{
++	const struct fay_regmap *r = &fay->regmaps[(nr - 1) % FAY_MAX_REGMAPS];
++
++	if (smp_load_acquire(&r->seq) != nr)
++		return false;
++	out->dva = READ_ONCE(r->dva);
++	out->pa = READ_ONCE(r->pa);
++	out->size = READ_ONCE(r->size);
++	out->tag = READ_ONCE(r->tag);
++	out->index = READ_ONCE(r->index);
++	smp_rmb();
++	return READ_ONCE(r->seq) == nr;
++}
++
++static void fay_sweep_emit_run(struct apple_dcp *dcp, struct seq_file *m,
++			       const char *why, u64 dva, u64 pa,
++			       unsigned int pages)
++{
++	u64 len = (u64)pages * FAY_SWEEP_STEP;
++
++	fay_out(dcp, m,
++		"fay-sweep: [%s] map dva 0x%llx-0x%llx -> pa 0x%llx-0x%llx (%u x 16K)\n",
++		why, dva, dva + len - 1, pa, pa + len - 1, pages);
++}
++
++static void fay_sweep_probe(struct apple_dcp *dcp, struct seq_file *m,
++			    const char *why, struct iommu_domain *dom, u64 dva)
++{
++	u64 pa = iommu_iova_to_phys(dom, dva);
++
++	fay_out(dcp, m, "fay-sweep: [%s] probe dva 0x%llx -> pa 0x%llx%s\n",
++		why, dva, pa, pa ? "" : " (NO TRANSLATION)");
++}
++
++/* exported by drivers/iommu/apple-dart.c (fay patch 0010) */
++void apple_dart_fay_dump(struct device *master, u64 dva, const char *why);
++void apple_dart_fay_flush(struct device *master, const char *why);
++
++void fay_dcp_sweep(struct apple_dcp *dcp, const char *why, struct seq_file *m)
++{
++	struct fay_dcp_debug *fay = &dcp->fay;
++	unsigned int run_pages = 0, mapped = 0, runs = 0, nr_maps, first_nr, nr;
++	u64 dva, pa, run_dva = 0, run_pa = 0, t0, t1;
++	struct iommu_domain *dom;
++	unsigned long id;
++
++	t0 = ktime_get_ns();
++	/* patch 0011: optional DART TLB flush right before setPowerState(0) */
++	if (!strcmp(why, "poff") || !strcmp(why, "sleep"))
++		apple_dart_fay_flush(dcp->dev, why);
++	if (!strcmp(why, "debugfs") || !strcmp(why, "poff") || !strcmp(why, "crash"))
++		fay_apf_dump_once(dcp, why);
++	/* the DART's own view (registers + walk from the hardware TTBR) */
++	apple_dart_fay_dump(dcp->dev, FAY_DVA_FAULT_ADDR, why);
++	dom = iommu_get_domain_for_dev(dcp->dev);
++	if (!dom) {
++		fay_out(dcp, m,
++			"fay-sweep: [%s] t=%llu no IOMMU domain for %s, skipped\n",
++			why, t0, dev_name(dcp->dev));
++		return;
++	}
++
++	fay_out(dcp, m,
++		"fay-sweep: [%s] begin t=%llu domain-type=0x%x range 0x%llx-0x%llx step 0x%x crashed=%d active=%d\n",
++		why, t0, dom->type, FAY_SWEEP_START, FAY_SWEEP_END - 1,
++		FAY_SWEEP_STEP, dcp->crashed, dcp->active);
++
++	for (dva = FAY_SWEEP_START; dva < FAY_SWEEP_END; dva += FAY_SWEEP_STEP) {
++		pa = iommu_iova_to_phys(dom, dva);
++		if (pa)
++			mapped++;
++
++		/* extend the current run if DVA and PA are both contiguous */
++		if (pa && run_pages &&
++		    pa == run_pa + (u64)run_pages * FAY_SWEEP_STEP) {
++			run_pages++;
++			continue;
++		}
++
++		if (run_pages) {
++			fay_sweep_emit_run(dcp, m, why, run_dva, run_pa,
++					   run_pages);
++			runs++;
++			run_pages = 0;
++		}
++
++		if (pa) {
++			run_dva = dva;
++			run_pa = pa;
++			run_pages = 1;
++		}
++	}
++	if (run_pages) {
++		fay_sweep_emit_run(dcp, m, why, run_dva, run_pa, run_pages);
++		runs++;
++	}
++
++	/* The faulting page and address of 2026-10-03, logged even if zero */
++	fay_sweep_probe(dcp, m, why, dom, FAY_DVA_FAULT_PAGE);
++	fay_sweep_probe(dcp, m, why, dom, FAY_DVA_FAULT_ADDR);
++
++	/*
++	 * D411 / D452 DVAs against the PA they are supposed to map, newest
++	 * FAY_MAX_REGMAPS records. Every 16K page the range touches is checked:
++	 * a D452 range is only 4K aligned and its DVA carries the offset of the
++	 * PA within its 16K page, so it can end in one more page than
++	 * size / 16K suggests.
++	 */
++	nr_maps = smp_load_acquire(&fay->nr_regmaps);
++	first_nr = nr_maps > FAY_MAX_REGMAPS ? nr_maps - FAY_MAX_REGMAPS + 1 : 1;
++	for (nr = first_nr; nr <= nr_maps; nr++) {
++		unsigned int pages = 0, missing = 0, mismatch = 0;
++		struct fay_regmap rec;
++		const struct fay_regmap *r = &rec;
++		u64 page, dva_lo, dva_hi, pa_lo, first;
++
++		if (!fay_regmap_get(fay, nr, &rec)) {
++			fay_out(dcp, m,
++				"fay-sweep: [%s] regmap #%u overwritten while sweeping\n",
++				why, nr);
++			continue;
++		}
++
++		if (r->dva == DMA_MAPPING_ERROR) {
++			fay_out(dcp, m,
++				"fay-sweep: [%s] #%u D%u idx=%u pa=0x%llx size=0x%llx dva=DMA_MAPPING_ERROR\n",
++				why, nr, r->tag, r->index, r->pa, r->size);
++			continue;
++		}
++
++		dva_lo = ALIGN_DOWN(r->dva, FAY_SWEEP_STEP);
++		dva_hi = ALIGN(r->dva + r->size, FAY_SWEEP_STEP);
++		pa_lo = ALIGN_DOWN(r->pa, FAY_SWEEP_STEP);
++		first = iommu_iova_to_phys(dom, r->dva);
++		for (page = dva_lo; page < dva_hi; page += FAY_SWEEP_STEP) {
++			u64 p = iommu_iova_to_phys(dom, page);
++
++			pages++;
++			if (!p)
++				missing++;
++			else if (p != pa_lo + (page - dva_lo))
++				mismatch++;
++		}
++
++		fay_out(dcp, m,
++			"fay-sweep: [%s] #%u D%u idx=%u dva=0x%llx expect-pa=0x%llx size=0x%llx -> pa 0x%llx pages=%u missing=%u mismatch=%u %s\n",
++			why, nr, r->tag, r->index, r->dva, r->pa, r->size, first,
++			pages, missing, mismatch,
++			(missing || mismatch) ? "BAD" : "OK");
++	}
++
++	/* memdesc table (D451 allocate_buffer / D452 map_physical) */
++	for_each_set_bit(id, dcp->memdesc_map, DCP_MAX_MAPPINGS) {
++		const struct dcp_mem_descriptor *md = &dcp->memdesc[id];
++
++		if (id == 0)	/* reserved, see dcp_comp_bind() */
++			continue;
++
++		if (md->buf)
++			fay_out(dcp, m,
++				"fay-sweep: [%s] memdesc id=%lu buf dva=0x%llx size=0x%zx -> pa 0x%llx\n",
++				why, id, (u64)md->dva, md->size,
++				(u64)iommu_iova_to_phys(dom, md->dva));
++		else if (md->reg)
++			fay_out(dcp, m,
++				"fay-sweep: [%s] memdesc id=%lu reg=0x%llx size=0x%zx (dva: see D452 line)\n",
++				why, id, md->reg, md->size);
++		else
++			fay_out(dcp, m,
++				"fay-sweep: [%s] memdesc id=%lu NO buf/reg, stale dva=0x%llx size=0x%zx\n",
++				why, id, (u64)md->dva, md->size);
++	}
++
++	t1 = ktime_get_ns();
++	fay_out(dcp, m,
++		"fay-sweep: [%s] end mapped=%u pages in %u runs, regmaps recorded=%u checked=%u overwritten=%u, took %llu ns\n",
++		why, mapped, runs, nr_maps, nr_maps - first_nr + 1,
++		first_nr - 1, t1 - t0);
++}
++
++static int fay_sweep_show(struct seq_file *m, void *unused)
++{
++	fay_dcp_sweep(m->private, "debugfs", m);
++	return 0;
++}
++DEFINE_SHOW_ATTRIBUTE(fay_sweep);
++
++static void fay_dcp_save_crashlog(struct apple_dcp *dcp, const void *crashlog,
++				  size_t size)
++{
++	struct fay_dcp_debug *fay = &dcp->fay;
++	unsigned int idx = fay->nr_crashlogs;
++	struct debugfs_blob_wrapper *blob;
++	struct dentry *d;
++	char name[16];
++	void *copy;
++
++	if (!crashlog || !size) {
++		dev_warn(dcp->dev,
++			 "fay-crashlog: RTKit passed no crashlog (size %zu), nothing saved\n",
++			 size);
++		return;
++	}
++	if (!fay->ready) {
++		dev_warn(dcp->dev,
++			 "fay-crashlog: debug state not initialised, crashlog not saved\n");
++		return;
++	}
++	if (idx >= FAY_MAX_CRASHLOGS) {
++		dev_warn(dcp->dev,
++			 "fay-crashlog: %u crashlogs already saved, dropping this one (%zu bytes)\n",
++			 idx, size);
++		return;
++	}
++
++	copy = kmemdup(crashlog, size, GFP_KERNEL);
++	if (!copy) {
++		dev_err(dcp->dev,
++			"fay-crashlog: kmemdup(%zu) failed, crashlog not saved\n",
++			size);
++		return;
++	}
++
++	blob = &fay->crashlog[idx];
++	blob->data = copy;
++	blob->size = size;
++	/* counted before the debugfs file exists so it is always freed */
++	fay->nr_crashlogs = idx + 1;
++
++	if (idx == 0)
++		strscpy(name, "crashlog", sizeof(name));
++	else
++		snprintf(name, sizeof(name), "crashlog.%u", idx);
++
++	if (!fay->dir) {
++		dev_warn(dcp->dev,
++			 "fay-crashlog: no debugfs dir, %zu byte copy kept in memory only\n",
++			 size);
++		return;
++	}
++
++	d = debugfs_create_blob(name, 0400, fay->dir, blob);
++	if (IS_ERR(d))
++		dev_warn(dcp->dev,
++			 "fay-crashlog: debugfs_create_blob(%s) failed: %pe\n",
++			 name, d);
++	else
++		dev_info(dcp->dev,
++			 "fay-crashlog: saved %zu bytes as <debugfs>/fay-dcp/%s/%s\n",
++			 size, dev_name(dcp->dev), name);
++}
++
++static void fay_dcp_debugfs_fini(void *data)
++{
++	struct apple_dcp *dcp = data;
++	struct fay_dcp_debug *fay = &dcp->fay;
++	unsigned int i;
++
++	fay->ready = false;
++	/* waits for in-flight readers of sweep/crashlog */
++	debugfs_remove_recursive(fay->dir);
++	fay->dir = NULL;
++
++	for (i = 0; i < fay->nr_crashlogs; i++) {
++		kfree(fay->crashlog[i].data);
++		fay->crashlog[i].data = NULL;
++		fay->crashlog[i].size = 0;
++	}
++	fay->nr_crashlogs = 0;
++}
++
++static void fay_dcp_debugfs_init(struct apple_dcp *dcp)
++{
++	struct fay_dcp_debug *fay = &dcp->fay;
++	struct dentry *dir;
++
++	/* removes the directory and frees saved crashlogs on unbind */
++	if (devm_add_action_or_reset(dcp->dev, fay_dcp_debugfs_fini, dcp)) {
++		dev_warn(dcp->dev, "fay: devm_add_action failed, no debug state\n");
++		return;
++	}
++	fay->ready = true;
++
++	if (IS_ERR_OR_NULL(fay_dbgfs_root)) {
++		dev_warn(dcp->dev, "fay: no debugfs root, sweep/crashlog files unavailable\n");
++		return;
++	}
++
++	dir = debugfs_create_dir(dev_name(dcp->dev), fay_dbgfs_root);
++	if (IS_ERR(dir)) {
++		dev_warn(dcp->dev, "fay: debugfs_create_dir failed: %pe\n", dir);
++		return;
++	}
++	fay->dir = dir;
++	debugfs_create_file("sweep", 0400, dir, dcp, &fay_sweep_fops);
++}
++
+ static void dcp_rtk_crashed(void *cookie, const void *crashlog, size_t crashlog_size)
+ {
+ 	struct apple_dcp *dcp = cookie;
+ 
+ 	dcp->crashed = true;
+ 	dev_err(dcp->dev, "DCP has crashed\n");
++	/*
++	 * fay: crashlog copy and DART state at the crash (debug only). The
++	 * crashlog is copied first: the sweep walks page-table memory and is
++	 * the only new code here that could fault.
++	 */
++	fay_dcp_save_crashlog(dcp, crashlog, crashlog_size);
++	fay_dcp_sweep(dcp, "crash", NULL);
+ 	if (dcp->connector) {
+ 		dcp->connector->connected = 0;
+ 		drm_edid_free(dcp->connector->drm_edid);
+@@ -1303,6 +1772,9 @@
+ 		}
+ 	}
+ 
++	/* fay: debugfs sweep/crashlog files (debug only) */
++	fay_dcp_debugfs_init(dcp);
++
+ 	return component_add(&pdev->dev, &dcp_comp_ops);
+ }
+ 
+@@ -1393,10 +1865,14 @@
+ 
+ void __init dcp_register(void)
+ {
++	/* fay: /sys/kernel/debug/fay-dcp/ (debug only); errors are tolerated */
++	fay_dbgfs_root = debugfs_create_dir("fay-dcp", NULL);
+ 	platform_driver_register(&apple_platform_driver);
+ }
+ 
+ void __exit dcp_unregister(void)
+ {
+ 	platform_driver_unregister(&apple_platform_driver);
++	debugfs_remove_recursive(fay_dbgfs_root);
++	fay_dbgfs_root = NULL;
+ }

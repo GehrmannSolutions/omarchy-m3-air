@@ -1,0 +1,106 @@
+From 91eeac7200c2b857f3ffd81ad01370398cf0ea96 Mon Sep 17 00:00:00 2001
+From: Marius Gehrmann <marius@gehrmann.solutions>
+Date: Tue, 13 Oct 2026 10:01:28 +0200
+Subject: [PATCH 11/12] drm: apple: Leave the next Type-C display alone when
+ the old CRTC powers off
+
+When a Type-C display is unplugged while another port waits for the
+pipeline (the T8122 dcpext drives one display, a second one waits with
+-EBUSY), dcp_typec_pipeline_freed() hands the pipeline to the waiting
+port at once, and its connection starts before the desktop has turned
+the old display's CRTC off. That power-off then drops HPD and
+disconnects the DPTX port, which by now belongs to the new display: the
+firmware reports the new sink inactive and the display stays dark.
+Whether it works depends on who is faster, the desktop or the fabric;
+on J613 (display on the front port unplugged, a display on the rear port
+waiting) both orders were seen.
+
+Count the Type-C unplugs (dcp_dptx_disconnect_oob(), which already
+releases the link of the display that went) and remember the count
+when the CRTC is powered on. If a display was unplugged since, the
+power-off only powers IOMFB off and leaves the current connection, its
+reconnect work and its HPD completion alone. DPMS off of a display that
+is still attached is unchanged.
+
+Assisted-by: Claude:claude-opus-5-5
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_017YMqWu7A3VwEYtHaA1TusK
+Signed-off-by: Marius Gehrmann <marius@gehrmann.solutions>
+---
+ drivers/gpu/drm/apple/dcp-internal.h |  4 ++++
+ drivers/gpu/drm/apple/dcp.c          | 24 ++++++++++++++++++++++++
+ 2 files changed, 28 insertions(+)
+
+diff --git a/drivers/gpu/drm/apple/dcp-internal.h b/drivers/gpu/drm/apple/dcp-internal.h
+index 20fd9e9f5..e5e40af46 100644
+--- a/drivers/gpu/drm/apple/dcp-internal.h
++++ b/drivers/gpu/drm/apple/dcp-internal.h
+@@ -264,6 +264,10 @@ struct apple_dcp {
+ 	/* One HPD pulse after a placeholder EDID, per Type-C connection. */
+ 	bool placeholder_retried;
+ 	u64 typec_generation;	/* hpd_mutex: identifies the current connection */
++	/* hpd_mutex: Type-C displays unplugged so far; see dcp_poweroff() */
++	u64 typec_unplugs;
++	/* typec_unplugs when the CRTC was last powered on */
++	u64 crtc_unplugs;
+ 	u64 placeholder_generation;
+ 	struct delayed_work placeholder_edid_wq;
+ 	bool use_timestamps;
+diff --git a/drivers/gpu/drm/apple/dcp.c b/drivers/gpu/drm/apple/dcp.c
+index 41e0dcbb3..615704828 100644
+--- a/drivers/gpu/drm/apple/dcp.c
++++ b/drivers/gpu/drm/apple/dcp.c
+@@ -1150,6 +1150,7 @@ int dcp_dptx_disconnect_oob(struct platform_device *pdev, u32 port)
+ 		scoped_guard(mutex, &dcp->hpd_mutex) {
+ 			WRITE_ONCE(dcp->typec_cable_connected, false);
+ 			dcp->typec_generation++;
++			dcp->typec_unplugs++;
+ 			/* Nothing left to retry for the display that went. */
+ 			if (dcp->external_native)
+ 				cancel_delayed_work(&dcp->external_retry_wq);
+@@ -1545,6 +1546,8 @@ void dcp_poweron(struct platform_device *pdev)
+ 	int ret;
+ 
+ 	if (dcp_is_typec_output(dcp)) {
++		scoped_guard(mutex, &dcp->hpd_mutex)
++			dcp->crtc_unplugs = dcp->typec_unplugs;
+ 		wait_for_typec_hpd = READ_ONCE(dcp->typec_crtc_off) &&
+ 				    READ_ONCE(dcp->typec_cable_connected);
+ 		WRITE_ONCE(dcp->typec_crtc_off, false);
+@@ -1604,12 +1607,33 @@ void dcp_poweron(struct platform_device *pdev)
+ void dcp_poweroff(struct platform_device *pdev)
+ {
+ 	struct apple_dcp *dcp = platform_get_drvdata(pdev);
++	bool display_gone = false;
+ 	int ret;
+ 
+ 	cancel_delayed_work(&dcp->swap_watchdog_wq);
+ 	if (dcp->avep)
+ 		av_service_disconnect(dcp);
+ 
++	/*
++	 * The display this CRTC was powered on for has been unplugged since:
++	 * its link went down with the cable (dcp_dptx_disconnect_oob()), and
++	 * the desktop only now turns the CRTC off. By then the pipeline may
++	 * already drive the next display, on this port or on another one that
++	 * was waiting for it, and that connection is not the CRTC's to
++	 * release: dropping its HPD makes the firmware report the new display
++	 * inactive, and it stays dark.
++	 */
++	if (dcp_is_typec_output(dcp)) {
++		scoped_guard(mutex, &dcp->hpd_mutex)
++			display_gone = dcp->typec_unplugs != dcp->crtc_unplugs;
++		if (display_gone) {
++			dev_dbg(dcp->dev,
++				"CRTC off after its display was unplugged: leaving the current connection alone\n");
++			_dcp_poweroff(dcp);
++			return;
++		}
++	}
++
+ 	/*
+ 	 * Powering a Type-C CRTC off drops DCP's synthetic HPD, and the firmware
+ 	 * reports that as an unplug. The display is still attached: keep the
+-- 
+2.56.0
+

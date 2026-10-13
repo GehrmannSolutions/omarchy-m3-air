@@ -1,0 +1,119 @@
+From 3a9743498254da3573196fec532307ad15f5b141 Mon Sep 17 00:00:00 2001
+From: Marius Gehrmann <marius@gehrmann.solutions>
+Date: Sun, 11 Oct 2026 17:41:59 +0200
+Subject: [PATCH 6/7] arm64: dts: apple: t8122-j613: Enable USB-C display
+ output
+
+Enable dcpext and route it through ATC0 to the left-back USB-C port.
+Enable synchronous firmware acknowledgements and keep ATC0 powered, as
+on J514s.
+
+In the macOS ADT on J613, dcpext is display-crossbar ufp1, port 0,
+which is crossbar state 2 (dispext1,0) in the T602x model, hence
+mux-index 2 on atc0-dpxbar. The dcpext node itself stays disabled here;
+m1n1 enables it once the dcpext ASC firmware is reserved. m1n1 looks it
+up by the "dcpext" alias, as on t8112-j473, so add that alias.
+
+Requires AsahiLinux/linux#607 for T8122 DisplayPort support in the
+ATC PHY.
+
+Tested on MacBook Air M3 (J613) with #607 and current m1n1 main plus
+"kboot: Reserve dcpext firmware on t8122": an external DP monitor on
+the left-back USB-C port comes up at 1920x1080, survives DPMS off/on
+and replugging. J615 is left alone, as it is untested.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_017YMqWu7A3VwEYtHaA1TusK
+---
+ .../arch/arm64/boot/dts/apple/t8122-j613.dts  | 68 +++++++++++++++++++
+ 1 file changed, 68 insertions(+)
+
+diff --git a/linux/arch/arm64/boot/dts/apple/t8122-j613.dts b/linux/arch/arm64/boot/dts/apple/t8122-j613.dts
+index 87623fd..e53dfc2 100644
+--- a/linux/arch/arm64/boot/dts/apple/t8122-j613.dts
++++ b/linux/arch/arm64/boot/dts/apple/t8122-j613.dts
+@@ -18,6 +18,10 @@
+ 	compatible = "apple,j613", "apple,t8122", "apple,arm-platform";
+ 	model = "Apple MacBook Air (13-inch, M3, 2024)";
+ 
++	aliases {
++		dcpext = &dcpext;
++	};
++
+ 	led-controller {
+ 		compatible = "pwm-leds";
+ 		led-0 {
+@@ -31,6 +35,70 @@
+ 	};
+ };
+ 
++&typec0 {
++	displayport = <&dcpext>;
++};
++
++&display {
++	iommus = <&disp_dart 0>, <&dispext0_dart 0 0x100 0x0 0x10 0x0>;
++};
++
++&dispext0_dart {
++	status = "okay";
++};
++
++&dcpext_dart {
++	status = "okay";
++};
++
++&dcpext_mbox {
++	status = "okay";
++};
++
++&dcpext {
++	apple,sync-syslog-ack;
++	apple,connector-type = "DP";
++	apple,dptx-phy = <0>;
++	phys = <&atcphy0 PHY_TYPE_DP>;
++	phy-names = "dp-phy";
++	mux-controls = <&atcphy0_xbar 0>;
++	mux-control-names = "dp-xbar";
++	mux-index = <2>;
++
++	ports {
++		#address-cells = <1>;
++		#size-cells = <0>;
++
++		port@1 {
++			reg = <1>;
++
++			dcpext_dpout: endpoint {
++				remote-endpoint = <&atcphy0_dp>;
++			};
++		};
++	};
++};
++
++&atcphy0 {
++	ports {
++		port@2 {
++			reg = <2>;
++
++			atcphy0_dp: endpoint {
++				remote-endpoint = <&dcpext_dpout>;
++			};
++		};
++	};
++};
++
++&atcphy0_xbar {
++	status = "okay";
++};
++
++&ps_atc0_common {
++	apple,always-on;
++};
++
+ &panel {
+ 	compatible = "apple,panel-j613", "apple,panel";
+ 	width-mm = <290>;
+-- 
+2.56.0
+

@@ -1,0 +1,76 @@
+From 63514b4019c9b515c274cac5f2fd82728d293ccc Mon Sep 17 00:00:00 2001
+From: Marius Gehrmann <marius@gehrmann.solutions>
+Date: Sun, 11 Oct 2026 16:26:32 +0200
+Subject: [PATCH 2/7] drm: apple: Map a RAM page for bw-scratch in Dashboard
+ mode
+
+On t8122 (M3) the devicetree has apple,bw-scratch but no
+apple,bw-doorbell, so the DCP firmware runs its RT bandwidth handling in
+"Dashboard" mode. It asks for the pmgr dashboard page through the
+map_reg callback (D411) and the driver maps the MMIO page into dart-dcp
+with dma_map_resource().
+
+The firmware's only write through that mapping is a 64-bit zero to the
+bw-scratch offset (0x908) on power-off. dart-dcp rejects it:
+
+  apple-dart 28d30c000.iommu: translation fault: status:0x90540008
+  stream:5 ... NO PTE FOR IOVA at 0x10fffdfc908
+
+(FILL_REGION | NO_PTE), the DCP crashes and the display never comes
+back after the first screen blank / DPMS off.
+
+At the fault the page tables, TTBR/TCR and the iBoot-programmed APF
+slices (which cover 0x2d03c0000-0x2d03effff) are intact, and a DART TLB
+flush before power-off does not help. The locked access-region
+registers only cover DRAM, which may be why the DART refuses to fill an
+MMIO target; that could not be tested because they ignore writes.
+
+Hand the firmware a RAM page instead of the dashboard page in Dashboard
+mode. pmgr no longer sees the firmware's final zero write; the
+dashboard already reads zero at power-on, so nothing else is lost.
+
+Tested on MacBook Air M3 (J613), DCP 14.7: 4 boots with 3 blank/unblank
+cycles each and a normal Hyprland session with DPMS off/on, no DART
+fault and no DCP crash.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_017YMqWu7A3VwEYtHaA1TusK
+---
+ linux/drivers/gpu/drm/apple/iomfb_template.c | 21 ++++++++++++++++++--
+ 1 file changed, 19 insertions(+), 2 deletions(-)
+
+diff --git a/linux/drivers/gpu/drm/apple/iomfb_template.c b/linux/drivers/gpu/drm/apple/iomfb_template.c
+index a41db29..058575b 100644
+--- a/linux/drivers/gpu/drm/apple/iomfb_template.c
++++ b/linux/drivers/gpu/drm/apple/iomfb_template.c
+@@ -472,8 +472,25 @@ static struct DCP_FW_NAME(dcp_map_reg_resp) dcpep_cb_map_reg(struct apple_dcp *d
+ 	} else {
+ 		struct resource *rsrc = dcp->disp_registers[req->index];
+ #if DCP_FW_VER >= DCP_FW_VERSION(13, 2, 0)
+-		dma_addr_t dva = dma_map_resource(dcp->dev, rsrc->start, resource_size(rsrc),
+-						  DMA_BIDIRECTIONAL, 0);
++		dma_addr_t dva;
++
++		/*
++		 * In "Dashboard" RT bandwidth mode (bw-scratch without a
++		 * bw-doorbell, e.g. t8122) the firmware's only write through
++		 * this mapping is a 64-bit zero to the pmgr dashboard on
++		 * power-off. dart-dcp rejects it (FILL_REGION|NO_PTE) and the
++		 * DCP crashes, so hand the firmware a RAM page instead.
++		 */
++		if (dcp->disp_bw_scratch_index && !dcp->disp_bw_doorbell_index &&
++		    req->index == dcp->disp_bw_scratch_index) {
++			if (!dmam_alloc_coherent(dcp->dev, resource_size(rsrc),
++						 &dva, GFP_KERNEL))
++				dva = DMA_MAPPING_ERROR;
++		} else {
++			dva = dma_map_resource(dcp->dev, rsrc->start,
++					       resource_size(rsrc),
++					       DMA_BIDIRECTIONAL, 0);
++		}
+ 		WARN_ON(dva == DMA_MAPPING_ERROR);
+ #endif
+ 
+-- 
+2.56.0
+

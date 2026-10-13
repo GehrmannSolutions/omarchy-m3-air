@@ -1,0 +1,59 @@
+From dcd3ddd63209fce3d29086af1ff2446c83fe8b83 Mon Sep 17 00:00:00 2001
+From: Marius Gehrmann <marius@gehrmann.solutions>
+Date: Sun, 11 Oct 2026 17:40:17 +0200
+Subject: [PATCH 5/7] arm64: dts: apple: t8122: Describe ATC display crossbars
+
+Add the display crossbars in front of the two ATC PHYs, disabled by
+default, as on T6030.
+
+The macOS ADT on J613 (Mac15,12, macOS 26.7.1) has atc0-dpxbar at
+0x70304c000 and atc1-dpxbar at 0xb0304c000, both with compatible
+"atc-dpxbar,t602x" (macOS binds AppleT602XATCDPXBAR), so the T8122
+crossbars fall back to the T6020 programming model. Only atc0 has been
+exercised so far.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_017YMqWu7A3VwEYtHaA1TusK
+---
+ linux/arch/arm64/boot/dts/apple/t8122.dtsi | 18 ++++++++++++++++++
+ 1 file changed, 18 insertions(+)
+
+diff --git a/linux/arch/arm64/boot/dts/apple/t8122.dtsi b/linux/arch/arm64/boot/dts/apple/t8122.dtsi
+index 7cc3c9d..df75f37 100644
+--- a/linux/arch/arm64/boot/dts/apple/t8122.dtsi
++++ b/linux/arch/arm64/boot/dts/apple/t8122.dtsi
+@@ -1626,6 +1626,15 @@
+ 			power-domains = <&ps_atc0_usb>;
+ 		};
+ 
++		atcphy0_xbar: mux@70304c000 {
++			compatible = "apple,t8122-display-crossbar",
++				"apple,t6020-display-crossbar";
++			reg = <0x7 0x0304c000 0x0 0x4000>;
++			#mux-control-cells = <1>;
++			power-domains = <&ps_atc0_usb>;
++			status = "disabled";
++		};
++
+ 		usb4_1_mbox: mailbox@b01108000 {
+ 			compatible = "apple,t8122-asc-mailbox",
+ 				"apple,asc-mailbox-v4";
+@@ -1792,6 +1801,15 @@
+ 			mode-switch;
+ 			power-domains = <&ps_atc1_usb>;
+ 		};
++
++		atcphy1_xbar: mux@b0304c000 {
++			compatible = "apple,t8122-display-crossbar",
++				"apple,t6020-display-crossbar";
++			reg = <0xb 0x0304c000 0x0 0x4000>;
++			#mux-control-cells = <1>;
++			power-domains = <&ps_atc1_usb>;
++			status = "disabled";
++		};
+ 	};
+ };
+ 
+-- 
+2.56.0
+

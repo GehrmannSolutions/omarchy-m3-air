@@ -1,0 +1,40 @@
+From 08545322e4e03f9e300d454e83e82647635a4474 Mon Sep 17 00:00:00 2001
+From: Marius Gehrmann <marius@gehrmann.solutions>
+Date: Sun, 11 Oct 2026 16:26:32 +0200
+Subject: [PATCH 1/7] m1n1: kboot: Reserve display carveouts on t8122
+
+dt_set_display() has no t8122 branch, so on M3 machines the DCP and
+disp0 carveouts are not described to the OS and DCP cannot start.
+
+The t8122 ADT (MacBook Air M3, J613, macOS 27) lists the same
+segment-ranges for iop-dcp-nub as t8112: region IDs 49 (asc-firmware),
+50 (dcp_data), 57, 94 and 95, with 94 mapped in dart-dcp stream 5 and
+dart-disp0 streams 0 and 4. Reuse the t8112 table.
+
+Tested on J613 with DCP firmware 14.7 on current main: the internal
+panel comes up via appledrm on asahi-wip-7.2 + PR #608.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_017YMqWu7A3VwEYtHaA1TusK
+---
+ m1n1/src/kboot.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/m1n1/src/kboot.c b/m1n1/src/kboot.c
+index 4bcb2a4..de9e3c7 100644
+--- a/m1n1/src/kboot.c
++++ b/m1n1/src/kboot.c
+@@ -2013,7 +2013,9 @@ static int dt_set_display(void)
+ 
+         ret = dt_carveout_reserved_regions("dcpext", NULL, NULL, dcpext_reserved_regions_t8103,
+                                            ARRAY_SIZE(dcpext_reserved_regions_t8103));
+-    } else if (!fdt_node_check_compatible(dt, 0, "apple,t8112")) {
++    } else if (!fdt_node_check_compatible(dt, 0, "apple,t8112") ||
++               !fdt_node_check_compatible(dt, 0, "apple,t8122")) {
++        /* t8122 uses the same region IDs and DART streams as t8112 */
+         ret = dt_carveout_reserved_regions("dcp", "disp0", disp0_piodma_alias,
+                                            disp_reserved_regions_t8112,
+                                            ARRAY_SIZE(disp_reserved_regions_t8112));
+-- 
+2.56.0
+

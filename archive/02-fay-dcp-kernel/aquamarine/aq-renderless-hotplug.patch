@@ -1,0 +1,24 @@
+diff --git i/src/backend/drm/DRM.cpp w/src/backend/drm/DRM.cpp
+index 2f3dcc7..c12d7b2 100644
+--- i/src/backend/drm/DRM.cpp
++++ w/src/backend/drm/DRM.cpp
+@@ -899,7 +899,18 @@ bool Aquamarine::CDRMBackend::updateSecondaryRendererState(DRMFBList* deferred)
+         if (rendererState.renderer && rendererState.allocator)
+             return true;
+ 
+-        return initMgpu();
++        // A backend without a primary never blits (shouldBlit() == !!primary), so its own
++        // renderer is optional: it only feeds glFormats, GBM buffer clears and readback for
++        // secondaries, all of which tolerate a null renderer. On display-only KMS devices
++        // (no render node / no matching EGL device) initMgpu() can never succeed, so don't
++        // fail here (connect() would drop hotplugged outputs) and don't retry every commit.
++        if (!initMgpu()) {
++            backend->log(AQ_LOG_WARNING, std::format("drm: No renderer for {}, continuing without one", gpu->path));
++            rendererState.allocator.reset();
++            rendererRequired = false;
++        }
++
++        return true;
+     }
+ 
+     const bool hasEnabledOutputs = std::ranges::any_of(connectors, [](const auto& c) { return c->status == DRM_MODE_CONNECTED && c->output && c->output->enabledState; });

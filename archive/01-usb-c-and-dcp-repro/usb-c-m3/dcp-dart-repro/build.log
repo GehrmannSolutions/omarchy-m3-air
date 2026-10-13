@@ -1,4 +1,4 @@
-make[1]: Entering directory '/home/mg/.cache/fay-build/wip/drivers/gpu/drm/apple'
+make[1]: Entering directory '~/.cache/fay-build/wip/drivers/gpu/drm/apple'
   CC [M]  apple_drv.o
   CC [M]  afk.o
   CC [M]  dcp.o
@@ -22,7 +22,7 @@ make[1]: Entering directory '/home/mg/.cache/fay-build/wip/drivers/gpu/drm/apple
   CC [M]  .module-common.o
   CC [M]  appledrm.mod.o
   LD [M]  appledrm.ko
-make[1]: Leaving directory '/home/mg/.cache/fay-build/wip/drivers/gpu/drm/apple'
+make[1]: Leaving directory '~/.cache/fay-build/wip/drivers/gpu/drm/apple'
 
 real	0m3.002s
 user	0m12.626s

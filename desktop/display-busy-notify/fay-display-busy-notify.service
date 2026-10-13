@@ -1,0 +1,12 @@
+[Unit]
+Description=Fay: hint when a second external display has to wait
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+ExecStart=%h/.local/bin/fay-display-busy-notify
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target

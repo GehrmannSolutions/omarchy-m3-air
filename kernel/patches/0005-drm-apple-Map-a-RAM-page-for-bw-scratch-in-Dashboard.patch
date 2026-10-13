@@ -1,0 +1,62 @@
+From 821a125bd2ef214313314c09a7b4929413531d2d Mon Sep 17 00:00:00 2001
+From: Marius Gehrmann <marius@gehrmann.solutions>
+Date: Mon, 12 Oct 2026 21:12:44 +0200
+Subject: [PATCH 05/12] drm: apple: Map a RAM page for bw-scratch in Dashboard
+ mode
+
+On T8122 (M3) the device tree has apple,bw-scratch but no
+apple,bw-doorbell, so the DCP firmware runs its real-time bandwidth
+handling in "Dashboard" mode. It asks for the pmgr dashboard page through
+the map_reg callback, and the driver maps that MMIO page into the DART
+with dma_map_resource(). The firmware's only write through the mapping
+is a 64-bit zero on power-off, which the DART rejects (FILL_REGION |
+NO_PTE); the DCP then crashes, and the display never comes back after
+the first blank.
+
+In Dashboard mode (bw-scratch without bw-doorbell) only, hand the
+firmware a RAM page instead. The T8122 dcpext is the processor that uses
+this path here; it keeps apple,bw-scratch = <&pmgr_dcp 0 5 0x910>.
+
+Assisted-by: Claude:claude-opus-5-5
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_017YMqWu7A3VwEYtHaA1TusK
+Signed-off-by: Marius Gehrmann <marius@gehrmann.solutions>
+---
+ drivers/gpu/drm/apple/iomfb_template.c | 21 +++++++++++++++++++--
+ 1 file changed, 19 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/apple/iomfb_template.c b/drivers/gpu/drm/apple/iomfb_template.c
+index d0752cd18..08e88fe72 100644
+--- a/drivers/gpu/drm/apple/iomfb_template.c
++++ b/drivers/gpu/drm/apple/iomfb_template.c
+@@ -481,8 +481,25 @@ static struct DCP_FW_NAME(dcp_map_reg_resp) dcpep_cb_map_reg(struct apple_dcp *d
+ 	} else {
+ 		struct resource *rsrc = dcp->disp_registers[req->index];
+ #if DCP_FW_VER >= DCP_FW_VERSION(13, 2, 0)
+-		dma_addr_t dva = dma_map_resource(dcp->dev, rsrc->start, resource_size(rsrc),
+-						  DMA_BIDIRECTIONAL, 0);
++		dma_addr_t dva;
++
++		/*
++		 * In "Dashboard" RT bandwidth mode (bw-scratch without a
++		 * bw-doorbell, e.g. t8122) the firmware's only write through
++		 * this mapping is a 64-bit zero to the pmgr dashboard on
++		 * power-off. dart-dcp rejects it (FILL_REGION|NO_PTE) and the
++		 * DCP crashes, so hand the firmware a RAM page instead.
++		 */
++		if (dcp->disp_bw_scratch_index && !dcp->disp_bw_doorbell_index &&
++		    req->index == dcp->disp_bw_scratch_index) {
++			if (!dmam_alloc_coherent(dcp->dev, resource_size(rsrc),
++						 &dva, GFP_KERNEL))
++				dva = DMA_MAPPING_ERROR;
++		} else {
++			dva = dma_map_resource(dcp->dev, rsrc->start,
++					       resource_size(rsrc),
++					       DMA_BIDIRECTIONAL, 0);
++		}
+ 		WARN_ON(dva == DMA_MAPPING_ERROR);
+ #endif
+ 
+-- 
+2.56.0
+

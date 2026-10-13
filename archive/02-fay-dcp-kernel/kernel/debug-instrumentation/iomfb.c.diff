@@ -1,0 +1,172 @@
+--- drivers/gpu/drm/apple/iomfb.c	2026-10-11 19:39:06.504008925 +0200
++++ ~/.cache/fay-build/wip/drivers/gpu/drm/apple/iomfb.c	2026-10-10 14:30:38.953162175 +0200
+@@ -214,11 +214,15 @@
+ 	return d[0] + (d[1] * 10) + (d[2] * 100);
+ }
+ 
++static void fay_log_ack(struct apple_dcp *dcp, enum dcp_context_id context);
++
+ /* Ack a callback from the DCP */
+ void dcp_ack(struct apple_dcp *dcp, enum dcp_context_id context)
+ {
+ 	struct dcp_channel *ch = dcp_get_channel(dcp, context);
+ 
++	/* fay: final reply of a deferred callback (debug only) */
++	fay_log_ack(dcp, context);
+ 	dcp_pop_depth(&ch->depth);
+ 	dcp_send_message(dcp, IOMFB_ENDPOINT,
+ 			 dcpep_ack(context));
+@@ -259,6 +263,128 @@
+ 	drm_kms_helper_connector_hotplug_event(&connector->base);
+ }
+ 
++/*
++ * fay: DART fault instrumentation (debug only, no functional change).
++ * Log every IOMFB callback after its handler ran and before it is acked:
++ * context, tag, header lengths, mailbox offset, ktime_get_ns() and the first
++ * 64 bytes of 'in' and 'out'. Greppable prefix "fay-cb:".
++ *   fay_cb_log=0  off
++ *   fay_cb_log=1  every callback (the test script loads the module with this)
++ *   fay_cb_log=2  every callback except the per-frame D589/D591 swap
++ *                 callbacks (default, so a normal desktop boot of this
++ *                 module does not log two lines per frame)
++ * sync=1: acked right after the handler, 'out' is final.
++ * sync=0: handler defers the ack, 'out' is not final yet; the real reply is
++ *         logged as a "fay-cb-ack:" line when the deferred dcp_ack() is sent.
++ * sync=-1: no handler for this tag, the callback is not acked (unchanged).
++ */
++static int fay_cb_log;
++module_param(fay_cb_log, int, 0644);
++MODULE_PARM_DESC(fay_cb_log,
++		 "fay debug: log IOMFB callbacks with in/out hex dumps (0=off, 1=all, 2=all but D589/D591 (default))");
++
++static bool fay_cb_log_tag(int tag)
++{
++	int mode = READ_ONCE(fay_cb_log);
++
++	if (!mode)
++		return false;
++	if (mode == 2 && (tag == 589 || tag == 591))
++		return false;
++	return true;
++}
++
++#define FAY_CB_DUMP_MAX 64
++
++/* Number of bytes of @p to dump: at most FAY_CB_DUMP_MAX, never past shmem. */
++static u32 fay_cb_dump_len(struct apple_dcp *dcp, const void *p, u32 len)
++{
++	const u8 *start = dcp->shmem;
++	const u8 *end = start + DCP_SHMEM_SIZE;
++	const u8 *q = p;
++
++	if (!start || !q || q < start || q >= end)
++		return 0;
++
++	return min3(len, (u32)FAY_CB_DUMP_MAX, (u32)(end - q));
++}
++
++static void fay_log_cb(struct apple_dcp *dcp, enum dcp_context_id context,
++		       const struct dcp_packet_header *hdr, int tag, u8 depth,
++		       const void *in, const void *out, u32 length, u16 offset,
++		       int sync)
++{
++	char name[12];
++	u32 in_n, out_n;
++	u64 now = ktime_get_ns();
++
++	/*
++	 * Remember the frame (also when logging is off, so that no stale
++	 * frame is reported later): a deferred ack logs the final reply.
++	 */
++	if (sync >= 0 && context < DCP_NUM_CONTEXTS &&
++	    depth < DCP_MAX_CALL_DEPTH) {
++		struct fay_cb_frame *f = &dcp->fay.cb_frames[context][depth];
++
++		f->tag = tag;
++		f->out_len = hdr->out_len;
++		f->valid = true;
++		f->logged = sync > 0;	/* synchronous: no separate ack line */
++	}
++
++	if (!fay_cb_log_tag(tag))
++		return;
++
++	if (tag >= 0)
++		snprintf(name, sizeof(name), "D%03d", tag);
++	else
++		snprintf(name, sizeof(name), "?%02x%02x%02x%02x",
++			 (u8)hdr->tag[3], (u8)hdr->tag[2], (u8)hdr->tag[1],
++			 (u8)hdr->tag[0]);
++
++	in_n = fay_cb_dump_len(dcp, in, hdr->in_len);
++	out_n = fay_cb_dump_len(dcp, out, hdr->out_len);
++
++	dev_info(dcp->dev,
++		 "fay-cb: ctx=%u %s in_len=%u out_len=%u len=%u off=0x%x shm=0x%lx depth=%u t=%llu sync=%d in[%u]=%*phN out[%u]=%*phN\n",
++		 context, name, hdr->in_len, hdr->out_len, length, offset,
++		 (unsigned long)((const u8 *)hdr - (const u8 *)dcp->shmem),
++		 depth, now, sync, in_n, (int)in_n, in, out_n, (int)out_n, out);
++}
++
++/*
++ * Called by dcp_ack() before it pops the call depth. For a callback whose
++ * handler deferred the ack (sync=0 above), log the reply that is actually
++ * sent: "fay-cb-ack: ctx= D<nnn> depth= out_len= t= out[n]=<hex>".
++ */
++static void fay_log_ack(struct apple_dcp *dcp, enum dcp_context_id context)
++{
++	struct dcp_channel *ch = dcp_get_channel(dcp, context);
++	struct fay_cb_frame *f;
++	const void *out;
++	u32 out_n;
++	u8 depth;
++
++	if (!ch || context >= DCP_NUM_CONTEXTS || !ch->depth ||
++	    ch->depth > DCP_MAX_CALL_DEPTH)
++		return;
++
++	depth = ch->depth - 1;
++	f = &dcp->fay.cb_frames[context][depth];
++	if (!f->valid)
++		return;
++	f->valid = false;
++	if (f->logged || !fay_cb_log_tag(f->tag))
++		return;
++
++	out = ch->output[depth];
++	out_n = fay_cb_dump_len(dcp, out, f->out_len);
++	dev_info(dcp->dev,
++		 "fay-cb-ack: ctx=%u D%03d depth=%u out_len=%u t=%llu out[%u]=%*phN\n",
++		 context, f->tag, depth, f->out_len, ktime_get_ns(), out_n,
++		 (int)out_n, out);
++}
++
+ static void dcpep_handle_cb(struct apple_dcp *dcp, enum dcp_context_id context,
+ 			    void *data, u32 length, u16 offset)
+ {
+@@ -268,10 +394,13 @@
+ 	int tag = dcp_parse_tag(hdr->tag);
+ 	struct dcp_channel *ch = dcp_get_channel(dcp, context);
+ 	u8 depth;
++	bool sync;
+ 
+ 	if (tag < 0 || tag >= IOMFB_MAX_CB || !dcp->cb_handlers || !dcp->cb_handlers[tag]) {
+ 		dev_warn(dev, "received unknown callback %c%c%c%c\n",
+ 			 hdr->tag[3], hdr->tag[2], hdr->tag[1], hdr->tag[0]);
++		fay_log_cb(dcp, context, hdr, tag, ch ? ch->depth : 0,
++			   data + sizeof(*hdr), NULL, length, offset, -1);
+ 		return;
+ 	}
+ 
+@@ -287,7 +416,9 @@
+ 	ch->output[depth] = out;
+ 	ch->end[depth] = offset + ALIGN(length, DCP_PACKET_ALIGNMENT);
+ 
+-	if (dcp->cb_handlers[tag](dcp, tag, out, in))
++	sync = dcp->cb_handlers[tag](dcp, tag, out, in);
++	fay_log_cb(dcp, context, hdr, tag, depth, in, out, length, offset, sync);
++	if (sync)
+ 		dcp_ack(dcp, context);
+ }
+ 

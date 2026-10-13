@@ -1,0 +1,59 @@
+From 7433d060f516088ea7496b5a51bc20a750544670 Mon Sep 17 00:00:00 2001
+From: Marius Gehrmann <marius@gehrmann.solutions>
+Date: Sun, 11 Oct 2026 20:05:54 +0200
+Subject: [PATCH 7/7] aquamarine: drm: Don't drop hotplugged outputs without a
+ renderer
+
+On display-only KMS devices without a usable EGL device (Apple
+apple-drm on Asahi M3, see also #370, #425), a monitor plugged in
+after the compositor started never appears.
+
+SDRMConnector::connect() returns early when
+updateSecondaryRendererState() fails (since #239). For a backend
+without a primary, that calls initMgpu(), which can never succeed on
+such devices, so connect() returns before newOutput is emitted.
+Outputs present at start are not affected. Every commit also retries
+initMgpu(), which is the log spam in #425.
+
+A backend without a primary never blits (shouldBlit() is !!primary),
+so its own renderer is optional there. Do what #310 does for evdi,
+for any driver: if initMgpu() fails on a backend without a primary,
+log a warning once, set rendererRequired = false and don't fail.
+
+Tested on MacBook Air M3 (Asahi, Hyprland 0.56.2, aquamarine 0.15.1
+with this change): a monitor that appears after Hyprland started now
+shows up, unplug/replug brings it back, DPMS off/on works.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_017YMqWu7A3VwEYtHaA1TusK
+---
+ aquamarine/src/backend/drm/DRM.cpp | 13 ++++++++++++-
+ 1 file changed, 12 insertions(+), 1 deletion(-)
+
+diff --git a/aquamarine/src/backend/drm/DRM.cpp b/aquamarine/src/backend/drm/DRM.cpp
+index 2f3dcc7..c12d7b2 100644
+--- a/aquamarine/src/backend/drm/DRM.cpp
++++ b/aquamarine/src/backend/drm/DRM.cpp
+@@ -899,7 +899,18 @@ bool Aquamarine::CDRMBackend::updateSecondaryRendererState(DRMFBList* deferred)
+         if (rendererState.renderer && rendererState.allocator)
+             return true;
+ 
+-        return initMgpu();
++        // A backend without a primary never blits (shouldBlit() == !!primary), so its own
++        // renderer is optional: it only feeds glFormats, GBM buffer clears and readback for
++        // secondaries, all of which tolerate a null renderer. On display-only KMS devices
++        // (no render node / no matching EGL device) initMgpu() can never succeed, so don't
++        // fail here (connect() would drop hotplugged outputs) and don't retry every commit.
++        if (!initMgpu()) {
++            backend->log(AQ_LOG_WARNING, std::format("drm: No renderer for {}, continuing without one", gpu->path));
++            rendererState.allocator.reset();
++            rendererRequired = false;
++        }
++
++        return true;
+     }
+ 
+     const bool hasEnabledOutputs = std::ranges::any_of(connectors, [](const auto& c) { return c->status == DRM_MODE_CONNECTED && c->output && c->output->enabledState; });
+-- 
+2.56.0
+

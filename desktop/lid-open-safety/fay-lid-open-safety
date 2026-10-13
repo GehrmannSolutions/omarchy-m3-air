@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Fay (2026-10-13): safety net for Omarchy's lid-open handling.
+# On this MacBook Air the Hyprland bind "switch:off:Apple SMC power/lid events"
+# -> omarchy-hyprland-monitor-clamshell sometimes does nothing when the lid opens
+# with an external display attached (2 of 5 opens in the test of 13.10.), so the
+# internal display stays off with only its backlight on. The kernel reports the
+# lid every time and logind follows (trace in agents/fay/m3-display/aurora/clamshell).
+# When logind reports the lid open and Omarchy's clamshell flag is still there a
+# moment later, run the same Omarchy script again (it is safe to run twice) and
+# note it in the journal (journalctl --user -t fay-lid-open).
+# Runs as the user service fay-lid-open-safety.service. Remove: systemctl --user
+# disable --now fay-lid-open-safety.service
+set -uo pipefail
+
+FLAG=$HOME/.local/state/omarchy/toggles/hypr/internal-monitor-clamshell.lua
+
+gdbus monitor --system --dest org.freedesktop.login1 --object-path /org/freedesktop/login1 |
+while IFS= read -r line; do
+  case $line in
+    *"'LidClosed': <false>"*)
+      # Omarchy's own handler deletes the flag within ~0.2 s when it works
+      sleep 1
+      if [[ -e $FLAG ]]; then
+        logger -t fay-lid-open "lid open, but Omarchy left the internal display off; running omarchy-hyprland-monitor-clamshell"
+        omarchy-hyprland-monitor-clamshell >/dev/null 2>&1 || true
+        [[ -e $FLAG ]] && logger -t fay-lid-open "still off after the retry"
+      fi
+      ;;
+  esac
+done

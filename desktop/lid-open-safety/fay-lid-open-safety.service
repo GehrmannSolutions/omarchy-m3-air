@@ -1,0 +1,12 @@
+[Unit]
+Description=Fay: bring the internal display back when Omarchy misses a lid open
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+ExecStart=%h/.local/bin/fay-lid-open-safety
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target

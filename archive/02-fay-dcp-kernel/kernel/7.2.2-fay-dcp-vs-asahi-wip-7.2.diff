@@ -1,0 +1,2935 @@
+ arch/arm64/boot/dts/apple/t6030-j514s.dts      |   7 +
+ arch/arm64/boot/dts/apple/t6030-j516s.dts      |   7 +
+ arch/arm64/boot/dts/apple/t6030.dtsi           |  94 +++++++++
+ arch/arm64/boot/dts/apple/t6031-base.dtsi      |  63 ++++++
+ arch/arm64/boot/dts/apple/t6031-die0.dtsi      |  86 ++++++++
+ arch/arm64/boot/dts/apple/t6031-dieX.dtsi      | 304 ++++++++++++++++++++++++++++
+ arch/arm64/boot/dts/apple/t6031-j514c.dts      |   7 +
+ arch/arm64/boot/dts/apple/t6031-j516c.dts      |   7 +
+ arch/arm64/boot/dts/apple/t6031.dtsi           |   7 +
+ arch/arm64/boot/dts/apple/t6032.dtsi           |  19 +-
+ arch/arm64/boot/dts/apple/t6034-j514m.dts      |   7 +
+ arch/arm64/boot/dts/apple/t6034-j516m.dts      |   7 +
+ arch/arm64/boot/dts/apple/t603x-j514-j516.dtsi |  10 +
+ arch/arm64/boot/dts/apple/t8122-j504.dts       |   7 +
+ arch/arm64/boot/dts/apple/t8122-j613.dts       |  86 ++++++++
+ arch/arm64/boot/dts/apple/t8122-j615.dts       |   7 +
+ arch/arm64/boot/dts/apple/t8122-jxxx.dtsi      |  12 ++
+ arch/arm64/boot/dts/apple/t8122.dtsi           | 197 ++++++++++++++++++
+ drivers/gpu/drm/apple/afk.c                    |  44 +++-
+ drivers/gpu/drm/apple/apple_drv.c              |   3 +-
+ drivers/gpu/drm/apple/epic/dpavservep.c        |  29 +--
+ drivers/gpu/drm/apple/iomfb_template.c         |  21 +-
+ drivers/gpu/drm/apple/iomfb_v14_7.c            |   4 +-
+ drivers/gpu/drm/apple/parser.c                 |   2 +
+ drivers/phy/apple/atc.c                        | 707 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++-----
+ drivers/soc/apple/mailbox.c                    |  25 +++
+ drivers/soc/apple/rtkit-internal.h             |   3 +
+ drivers/soc/apple/rtkit.c                      | 188 ++++++++++++++++--
+ drivers/usb/typec/Makefile                     |   2 +-
+ drivers/usb/typec/tipd/Kconfig                 |   2 +
+ drivers/usb/typec/tipd/core.c                  |  30 ++-
+ drivers/usb/typec/tipd/tps6598x.h              |   3 +
+ 32 files changed, 1891 insertions(+), 106 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/apple/t6030-j514s.dts b/arch/arm64/boot/dts/apple/t6030-j514s.dts
+index aa5db1e8..5d198082 100644
+--- a/arch/arm64/boot/dts/apple/t6030-j514s.dts
++++ b/arch/arm64/boot/dts/apple/t6030-j514s.dts
+@@ -17,6 +17,13 @@ / {
+ 	model = "Apple MacBook Pro (14-inch, M3 Pro, Nov 2023)";
+ };
+ 
++&panel {
++	compatible = "apple,panel-j514s", "apple,panel-mini-led", "apple,panel";
++	width-mm = <302>;
++	height-mm = <196>;
++	adj-height-mm = <189>;
++};
++
+ &framebuffer0 {
+ 	power-domains = <&ps_disp_cpu>;
+ };
+diff --git a/arch/arm64/boot/dts/apple/t6030-j516s.dts b/arch/arm64/boot/dts/apple/t6030-j516s.dts
+index 5532faac..ba723e4d 100644
+--- a/arch/arm64/boot/dts/apple/t6030-j516s.dts
++++ b/arch/arm64/boot/dts/apple/t6030-j516s.dts
+@@ -17,6 +17,13 @@ / {
+ 	model = "Apple MacBook Pro (16-inch, M3 Pro, Nov 2023)";
+ };
+ 
++&panel {
++	compatible = "apple,panel-j516s", "apple,panel-mini-led", "apple,panel";
++	width-mm = <346>;
++	height-mm = <223>;
++	adj-height-mm = <216>;
++};
++
+ &framebuffer0 {
+ 	power-domains = <&ps_disp_cpu>;
+ };
+diff --git a/arch/arm64/boot/dts/apple/t6030.dtsi b/arch/arm64/boot/dts/apple/t6030.dtsi
+index 4724c7fb..2963e1d5 100644
+--- a/arch/arm64/boot/dts/apple/t6030.dtsi
++++ b/arch/arm64/boot/dts/apple/t6030.dtsi
+@@ -617,6 +617,94 @@ mca: mca@28b400000 {
+ 			#sound-dai-cells = <1>;
+ 		};
+ 
++		disp_dart: iommu@28d304000 {
++			compatible = "apple,t6030-dart", "apple,t8110-dart";
++			reg = <0x2 0x8d304000 0x0 0x4000>;
++			#iommu-cells = <1>;
++			interrupt-parent = <&aic>;
++			interrupts = <AIC_IRQ 609 IRQ_TYPE_LEVEL_HIGH>;
++			status = "disabled";
++			power-domains = <&ps_disp_cpu>;
++			apple,dma-range = <0x100 0x0 0x10 0x0>;
++		};
++
++		dcp_dart: iommu@28d30c000 {
++			compatible = "apple,t6030-dart", "apple,t8110-dart";
++			reg = <0x2 0x8d30c000 0x0 0x4000>;
++			#iommu-cells = <1>;
++			interrupt-parent = <&aic>;
++			interrupts = <AIC_IRQ 609 IRQ_TYPE_LEVEL_HIGH>;
++			power-domains = <&ps_disp_cpu>;
++			apple,dma-range = <0x100 0x0 0x10 0x0>;
++		};
++
++		dcp_mbox: mbox@28ec08000 {
++			compatible = "apple,t6030-asc-mailbox", "apple,asc-mailbox-v4";
++			reg = <0x2 0x8ec08000 0x0 0x4000>;
++			interrupt-parent = <&aic>;
++			interrupts = <AIC_IRQ 589 IRQ_TYPE_LEVEL_HIGH>,
++				<AIC_IRQ 590 IRQ_TYPE_LEVEL_HIGH>,
++				<AIC_IRQ 591 IRQ_TYPE_LEVEL_HIGH>,
++				<AIC_IRQ 592 IRQ_TYPE_LEVEL_HIGH>;
++			interrupt-names = "send-empty", "send-not-empty",
++				"recv-empty", "recv-not-empty";
++			#mbox-cells = <0>;
++			power-domains = <&ps_disp_cpu>;
++		};
++
++		clk_disp: clock-disp {
++			compatible = "fixed-clock";
++			#clock-cells = <0>;
++			clock-frequency = <257142848>;
++			clock-output-names = "clk_disp";
++		};
++
++		dcp: dcp@28ec00000 {
++			compatible = "apple,t6030-dcp", "apple,dcp";
++			mboxes = <&dcp_mbox>;
++			mbox-names = "mbox";
++			iommus = <&dcp_dart 5>;
++			reg-names = "coproc", "disp-0", "disp-1", "disp-2", "disp-3", "disp-4";
++			reg = <0x2 0x8ec00000 0x0 0x4000>, // check?
++				<0x2 0xd0000000 0x0 0x690000>,
++                                <0x2 0xd0800000 0x0 0x690000>,
++                                <0x2 0xd1320000 0x0 0x4000>,
++                                <0x2 0xd1344000 0x0 0x4000>,
++                                <0x2 0xd2800000 0x0 0x800000>;
++			apple,bw-scratch = <&pmgr_dcp 0 5 0x988>;
++			apple,iomfb-surfaces = <1 1 0 1>;
++			power-domains = <&ps_disp_cpu>;
++			resets = <&ps_disp_cpu>;
++			clocks = <&clk_disp>;
++			phandle = <&dcp>;
++			// required bus properties for 'piodma' subdevice
++			#address-cells = <2>;
++			#size-cells = <2>;
++
++			disp0_piodma: piodma {
++				iommus = <&disp_dart 4>;
++				phandle = <&disp0_piodma>;
++			};
++
++			ports {
++				#address-cells = <1>;
++				#size-cells = <0>;
++				port@0 {
++					reg = <0>;
++					/* dcp_audio: endpoint { */
++					/* 	remote-endpoint = <&dpaudio0_dcp>; */
++					/* }; */
++				};
++			};
++		};
++
++		display: display-subsystem {
++			compatible = "apple,display-subsystem";
++			iommus = <&disp_dart 0>;
++			/* generate phandle explicitly for use in loader */
++			phandle = <&display>;
++		};
++
+ 		pmgr_gfx: power-management@290e80000 {
+ 			compatible = "apple,t6030-pmgr", "apple,t8103-pmgr", "syscon", "simple-mfd";
+ 			#address-cells = <1>;
+@@ -783,6 +871,12 @@ pcie_pins: pcie-pins {
+ 			};
+ 		};
+ 
++		pmgr_dcp: power-management@3503d0000 {
++			reg = <0x3 0x503d0000 0x0 0x4000>;
++			reg-names = "dcp-fw-pmgr";
++			#apple,bw-scratch-cells = <3>;
++		};
++
+ 		pmgr: power-management@350700000 {
+ 			compatible = "apple,t6030-pmgr", "apple,t8103-pmgr", "syscon", "simple-mfd";
+ 			#address-cells = <1>;
+diff --git a/arch/arm64/boot/dts/apple/t6031-base.dtsi b/arch/arm64/boot/dts/apple/t6031-base.dtsi
+index 4bf7ce85..16e16aee 100644
+--- a/arch/arm64/boot/dts/apple/t6031-base.dtsi
++++ b/arch/arm64/boot/dts/apple/t6031-base.dtsi
+@@ -497,6 +497,69 @@ nco_clkref: clock-ref-nco {
+ 		clock-output-names = "nco_ref";
+ 	};
+ 
++	clk_disp0: clock-disp {
++		compatible = "fixed-clock";
++		#clock-cells = <0>;
++		clock-frequency = <257142848>;
++		clock-output-names = "clk_disp";
++	};
++
++	clk_dispext0: clock-dispext0 {
++		compatible = "fixed-clock";
++		#clock-cells = <0>;
++		clock-frequency = <0>;
++		clock-output-names = "clk_dispext0";
++	};
++
++	clk_dispext0_die1: clock-dispext0_die1 {
++		compatible = "fixed-clock";
++		#clock-cells = <0>;
++		clock-frequency = <0>;
++		clock-output-names = "clk_dispext0_die1";
++	};
++
++	clk_dispext1: clock-dispext1 {
++		compatible = "fixed-clock";
++		#clock-cells = <0>;
++		clock-frequency = <0>;
++		clock-output-names = "clk_dispext1";
++	};
++
++	clk_dispext1_die1: clock-dispext1_die1 {
++		compatible = "fixed-clock";
++		#clock-cells = <0>;
++		clock-frequency = <0>;
++		clock-output-names = "clk_dispext1_die1";
++	};
++
++	clk_dispext2: clock-dispext2 {
++		compatible = "fixed-clock";
++		#clock-cells = <0>;
++		clock-frequency = <0>;
++		clock-output-names = "clk_dispext2";
++	};
++
++	clk_dispext2_die1: clock-dispext2_die1 {
++		compatible = "fixed-clock";
++		#clock-cells = <0>;
++		clock-frequency = <0>;
++		clock-output-names = "clk_dispext2_die1";
++	};
++
++	clk_dispext3: clock-dispext3 {
++		compatible = "fixed-clock";
++		#clock-cells = <0>;
++		clock-frequency = <0>;
++		clock-output-names = "clk_dispext3";
++	};
++
++	clk_dispext3_die1: clock-dispext3_die1 {
++		compatible = "fixed-clock";
++		#clock-cells = <0>;
++		clock-frequency = <0>;
++		clock-output-names = "clk_dispext3_die1";
++	};
++
+ 	reserved-memory {
+ 		#address-cells = <2>;
+ 		#size-cells = <2>;
+diff --git a/arch/arm64/boot/dts/apple/t6031-die0.dtsi b/arch/arm64/boot/dts/apple/t6031-die0.dtsi
+index 195fcdf8..676e86c4 100644
+--- a/arch/arm64/boot/dts/apple/t6031-die0.dtsi
++++ b/arch/arm64/boot/dts/apple/t6031-die0.dtsi
+@@ -32,6 +32,12 @@ aic: interrupt-controller@292400000 {
+ 		power-domains = <&ps_aic>;
+ 	};
+ 
++	pmgr_dcp: power-management@2903d0000 {
++		reg = <0x2 0x903d0000 0x0 0x4000>;
++		reg-names = "dcp-fw-pmgr";
++		#apple,bw-scratch-cells = <3>;
++	};
++
+ 	nub_spmi: spmi@2a1014000 {
+ 		compatible = "apple,t6031-spmi", "apple,t8103-spmi";
+ 		reg = <0x2 0xa1014000 0x0 0x100>;
+@@ -328,6 +334,86 @@ mtp_hid: input@0 {
+ 		};
+ 	};
+ 
++	disp0_dart: iommu@385304000 {
++		compatible = "apple,t6031-dart", "apple,t8110-dart";
++		reg = <0x3 0x85304000 0x0 0x4000>;
++		#iommu-cells = <1>;
++		interrupt-parent = <&aic>;
++		interrupts = <AIC_IRQ 0 1008 IRQ_TYPE_LEVEL_HIGH>;
++		status = "disabled";
++		power-domains = <&ps_disp_cpu>;
++		apple,dma-range = <0x100 0x0 0x10 0x0>;
++	};
++
++	dcp_dart: iommu@38530c000 {
++		compatible = "apple,t6031-dart", "apple,t8110-dart";
++		reg = <0x3 0x8530c000 0x0 0x4000>;
++		#iommu-cells = <1>;
++		interrupt-parent = <&aic>;
++		interrupts = <AIC_IRQ 0 1008 IRQ_TYPE_LEVEL_HIGH>;
++		power-domains = <&ps_disp_cpu>;
++		apple,dma-range = <0x100 0x0 0x10 0x0>;
++	};
++
++	dcp_mbox: mbox@386c08000 {
++		compatible = "apple,t6031-asc-mailbox", "apple,asc-mailbox-v4";
++		reg = <0x3 0x86c08000 0x0 0x4000>;
++		interrupt-parent = <&aic>;
++		interrupts = <AIC_IRQ 0 1029 IRQ_TYPE_LEVEL_HIGH>,
++			<AIC_IRQ 0 1030 IRQ_TYPE_LEVEL_HIGH>,
++			<AIC_IRQ 0 1031 IRQ_TYPE_LEVEL_HIGH>,
++			<AIC_IRQ 0 1032 IRQ_TYPE_LEVEL_HIGH>;
++		interrupt-names = "send-empty", "send-not-empty",
++			"recv-empty", "recv-not-empty";
++		#mbox-cells = <0>;
++		power-domains = <&ps_disp_cpu>;
++	};
++
++	dcp: dcp@386c00000 {
++		compatible = "apple,t6031-dcp", "apple,dcp";
++		mboxes = <&dcp_mbox>;
++		mbox-names = "mbox";
++		iommus = <&dcp_dart 5>;
++		reg-names = "coproc", "disp-0", "disp-1", "disp-2", "disp-3";
++		reg = <0x3 0x86c00000 0x0 0x4000>, // check?
++			<0x3 0x84000000 0x0 0x4000000>,
++			<0x3 0x85320000 0x0 0x4000>,
++			<0x3 0x85344000 0x0 0x4000>,
++			<0x3 0x86800000 0x0 0x800000>;
++		apple,bw-scratch = <&pmgr_dcp 0 4 0x1208>;
++		apple,iomfb-surfaces = <1 1 0 1>;
++		power-domains = <&ps_disp_cpu>;
++		resets = <&ps_disp_cpu>;
++		clocks = <&clk_disp0>;
++		phandle = <&dcp>;
++		// required bus properties for 'piodma' subdevice
++		#address-cells = <2>;
++		#size-cells = <2>;
++
++		disp0_piodma: piodma {
++			iommus = <&disp0_dart 4>;
++			phandle = <&disp0_piodma>;
++		};
++
++		ports {
++			#address-cells = <1>;
++			#size-cells = <0>;
++			port@0 {
++				reg = <0>;
++				/* dcp_audio: endpoint { */
++				/* 	remote-endpoint = <&dpaudio0_dcp>; */
++				/* }; */
++			};
++		};
++	};
++
++	display: display-subsystem {
++		compatible = "apple,display-subsystem";
++		iommus = <&disp0_dart 0>;
++		/* generate phandle explicitly for use in loader */
++		phandle = <&display>;
++	};
++
+ 	isp_dart0: iommu@38e4a8000 {
+ 		compatible = "apple,t6031-dart", "apple,t8110-dart";
+ 		reg = <0x3 0x8e4a8000 0x0 0x4000>;
+diff --git a/arch/arm64/boot/dts/apple/t6031-dieX.dtsi b/arch/arm64/boot/dts/apple/t6031-dieX.dtsi
+index 7f59144f..fba29253 100644
+--- a/arch/arm64/boot/dts/apple/t6031-dieX.dtsi
++++ b/arch/arm64/boot/dts/apple/t6031-dieX.dtsi
+@@ -140,6 +140,158 @@ DIE_NODE(avd_dart): iommu@2cd010000 {
+ 		power-domains = <&DIE_NODE(ps_avd_sys)>;
+ 	};
+ 
++	DIE_NODE(dispext3_dart): iommu@2c9304000 {
++		compatible = "apple,t6031-dart", "apple,t8110-dart";
++		reg = <0x2 0xc9304000 0x0 0x4000>;
++		#iommu-cells = <5>;
++		interrupt-parent = <&aic>;
++		interrupts = <AIC_IRQ DIE_NO 1155 IRQ_TYPE_LEVEL_HIGH>;
++		power-domains = <&DIE_NODE(ps_dispext3_cpu)>;
++		status = "disabled";
++	};
++
++	DIE_NODE(dcpext3_dart): iommu@2c930c000 {
++		compatible = "apple,t6031-dart", "apple,t8110-dart";
++		reg = <0x2 0xc930c000 0x0 0x4000>;
++		#iommu-cells = <5>;
++		interrupt-parent = <&aic>;
++		interrupts = <AIC_IRQ DIE_NO 1155 IRQ_TYPE_LEVEL_HIGH>;
++		power-domains = <&DIE_NODE(ps_dispext3_cpu)>;
++		status = "disabled";
++	};
++
++	DIE_NODE(dcpext3_mbox): mbox@2cac08000 {
++		compatible = "apple,t6031-asc-mailbox", "apple,asc-mailbox-v4";
++		reg = <0x2 0xcac08000 0x0 0x4000>;
++		interrupt-parent = <&aic>;
++		interrupts = <AIC_IRQ DIE_NO 1176 IRQ_TYPE_LEVEL_HIGH>,
++			<AIC_IRQ DIE_NO 1177 IRQ_TYPE_LEVEL_HIGH>,
++			<AIC_IRQ DIE_NO 1178 IRQ_TYPE_LEVEL_HIGH>,
++			<AIC_IRQ DIE_NO 1179 IRQ_TYPE_LEVEL_HIGH>;
++		interrupt-names = "send-empty", "send-not-empty",
++			"recv-empty", "recv-not-empty";
++		#mbox-cells = <0>;
++		power-domains = <&DIE_NODE(ps_dispext3_cpu)>;
++		resets = <&DIE_NODE(ps_dispext3_cpu)>;
++		status = "disabled";
++	};
++
++	DIE_NODE(dcpext3):  dcp@2cac00000 {
++		compatible = "apple,t6031-dcpext", "apple,dcpext";
++		mboxes = <&DIE_NODE(dcpext3_mbox)>;
++		mbox-names = "mbox";
++		iommus = <&DIE_NODE(dcpext3_dart) 5 0x100 0x0 0x10 0x0>;
++
++		reg-names = "coproc", "disp-0", "disp-1", "disp-2", "disp-3";
++		reg = <0x2 0xcac00000 0x0 0x4000>,
++			<0x2 0xc8000000 0x0 0x4000000>,
++			<0x2 0xc9320000 0x0 0x4000>,
++			<0x2 0xc9344000 0x0 0x4000>,
++			<0x2 0xca800000 0x0 0x800000>;
++		apple,bw-scratch = <&pmgr_dcp 0 4 0x1228>;
++		apple,iomfb-surfaces = <1 1 0 1>;
++		power-domains = <&DIE_NODE(ps_dispext3_cpu)>;
++		resets = <&DIE_NODE(ps_dispext3_cpu)>;
++		clocks = <&DIE_NODE(clk_dispext3)>;
++		phandle = <&DIE_NODE(dcpext3)>;
++		apple,dcp-index = <3>;
++		status = "disabled";
++		// required bus properties for 'piodma' subdevice
++		#address-cells = <2>;
++		#size-cells = <2>;
++
++		piodma {
++			iommus = <&DIE_NODE(dispext3_dart) 4 0x100 0x0 0x10 0x0>;
++		};
++
++		ports {
++			#address-cells = <1>;
++			#size-cells = <0>;
++			port@0 {
++				reg = <0>;
++				/* DIE_NODE(dcpext3_audio): endpoint { */
++				/* 	remote-endpoint = <&DIE_NODE(dpaudio1_dcp)>; */
++				/* }; */
++			};
++		};
++	};
++
++	DIE_NODE(dispext0_dart): iommu@305304000 {
++		compatible = "apple,t6031-dart", "apple,t8110-dart";
++		reg = <0x3 0x5304000 0x0 0x4000>;
++		#iommu-cells = <5>;
++		interrupt-parent = <&aic>;
++		interrupts = <AIC_IRQ DIE_NO 1047 IRQ_TYPE_LEVEL_HIGH>;
++		power-domains = <&DIE_NODE(ps_dispext0_cpu)>;
++		status = "disabled";
++	};
++
++	DIE_NODE(dcpext0_dart): iommu@30530c000 {
++		compatible = "apple,t6031-dart", "apple,t8110-dart";
++		reg = <0x3 0x530c000 0x0 0x4000>;
++		#iommu-cells = <5>;
++		interrupt-parent = <&aic>;
++		interrupts = <AIC_IRQ DIE_NO 1047 IRQ_TYPE_LEVEL_HIGH>;
++		power-domains = <&DIE_NODE(ps_dispext0_cpu)>;
++		status = "disabled";
++	};
++
++	DIE_NODE(dcpext0_mbox): mbox@306c08000 {
++		compatible = "apple,t6031-asc-mailbox", "apple,asc-mailbox-v4";
++		reg = <0x3 0x6c08000 0x0 0x4000>;
++		interrupt-parent = <&aic>;
++		interrupts = <AIC_IRQ DIE_NO 1068 IRQ_TYPE_LEVEL_HIGH>,
++			<AIC_IRQ DIE_NO 1069 IRQ_TYPE_LEVEL_HIGH>,
++			<AIC_IRQ DIE_NO 1070 IRQ_TYPE_LEVEL_HIGH>,
++			<AIC_IRQ DIE_NO 1071 IRQ_TYPE_LEVEL_HIGH>;
++		interrupt-names = "send-empty", "send-not-empty",
++			"recv-empty", "recv-not-empty";
++		#mbox-cells = <0>;
++		power-domains = <&DIE_NODE(ps_dispext0_cpu)>;
++		resets = <&DIE_NODE(ps_dispext0_cpu)>;
++		status = "disabled";
++	};
++
++	DIE_NODE(dcpext0):  dcp@306c00000 {
++		compatible = "apple,t6031-dcpext", "apple,dcpext";
++		mboxes = <&DIE_NODE(dcpext0_mbox)>;
++		mbox-names = "mbox";
++		iommus = <&DIE_NODE(dcpext0_dart) 5 0x100 0x0 0x10 0x0>;
++
++		reg-names = "coproc", "disp-0", "disp-1", "disp-2", "disp-3";
++		reg = <0x3 0x6c00000 0x0 0x4000>,
++			<0x2 0x4000000 0x0 0x4000000>,
++			<0x2 0x5320000 0x0 0x4000>,
++			<0x2 0x5344000 0x0 0x4000>,
++			<0x2 0x6800000 0x0 0x800000>;
++		apple,bw-scratch = <&pmgr_dcp 0 4 0x1210>;
++		apple,iomfb-surfaces = <1 1 0 1>;
++		power-domains = <&DIE_NODE(ps_dispext0_cpu)>;
++		resets = <&DIE_NODE(ps_dispext0_cpu)>;
++		clocks = <&DIE_NODE(clk_dispext0)>;
++		phandle = <&DIE_NODE(dcpext0)>;
++		apple,dcp-index = <0>;
++		status = "disabled";
++		// required bus properties for 'piodma' subdevice
++		#address-cells = <2>;
++		#size-cells = <2>;
++
++		piodma {
++			iommus = <&DIE_NODE(dispext0_dart) 4 0x100 0x0 0x10 0x0>;
++		};
++
++		ports {
++			#address-cells = <1>;
++			#size-cells = <0>;
++			port@0 {
++				reg = <0>;
++				/* DIE_NODE(dcpext0_audio): endpoint { */
++				/* 	remote-endpoint = <&DIE_NODE(dpaudio1_dcp)>; */
++				/* }; */
++			};
++		};
++	};
++
+ 	DIE_NODE(sio_dart): iommu@391004000 {
+ 		compatible = "apple,t6031-dart", "apple,t8110-dart";
+ 		reg = <0x3 0x91004000 0x0 0x4000>;
+@@ -182,6 +334,158 @@ DIE_NODE(pmgr_gfx): power-management@408e80000 {
+ 		reg = <0x4 0x8e80000 0 0x4000>;
+ 	};
+ 
++	DIE_NODE(dispext1_dart): iommu@449304000 {
++		compatible = "apple,t6031-dart", "apple,t8110-dart";
++		reg = <0x4 0x49304000 0x0 0x4000>;
++		#iommu-cells = <5>;
++		interrupt-parent = <&aic>;
++		interrupts = <AIC_IRQ DIE_NO 1083 IRQ_TYPE_LEVEL_HIGH>;
++		power-domains = <&DIE_NODE(ps_dispext1_cpu)>;
++		status = "disabled";
++	};
++
++	DIE_NODE(dcpext1_dart): iommu@44930c000 {
++		compatible = "apple,t6031-dart", "apple,t8110-dart";
++		reg = <0x4 0x4930c000 0x0 0x4000>;
++		#iommu-cells = <5>;
++		interrupt-parent = <&aic>;
++		interrupts = <AIC_IRQ DIE_NO 1083 IRQ_TYPE_LEVEL_HIGH>;
++		power-domains = <&DIE_NODE(ps_dispext1_cpu)>;
++		status = "disabled";
++	};
++
++	DIE_NODE(dcpext1_mbox): mbox@44ac08000 {
++		compatible = "apple,t6031-asc-mailbox", "apple,asc-mailbox-v4";
++		reg = <0x4 0x4ac08000 0x0 0x4000>;
++		interrupt-parent = <&aic>;
++		interrupts = <AIC_IRQ DIE_NO 1104 IRQ_TYPE_LEVEL_HIGH>,
++			<AIC_IRQ DIE_NO 1105 IRQ_TYPE_LEVEL_HIGH>,
++			<AIC_IRQ DIE_NO 1106 IRQ_TYPE_LEVEL_HIGH>,
++			<AIC_IRQ DIE_NO 1107 IRQ_TYPE_LEVEL_HIGH>;
++		interrupt-names = "send-empty", "send-not-empty",
++			"recv-empty", "recv-not-empty";
++		#mbox-cells = <0>;
++		power-domains = <&DIE_NODE(ps_dispext1_cpu)>;
++		resets = <&DIE_NODE(ps_dispext1_cpu)>;
++		status = "disabled";
++	};
++
++	DIE_NODE(dcpext1):  dcp@44ac00000 {
++		compatible = "apple,t6031-dcpext", "apple,dcpext";
++		mboxes = <&DIE_NODE(dcpext1_mbox)>;
++		mbox-names = "mbox";
++		iommus = <&DIE_NODE(dcpext1_dart) 5 0x100 0x0 0x10 0x0>;
++
++		reg-names = "coproc", "disp-0", "disp-1", "disp-2", "disp-3";
++		reg = <0x4 0x4ac00000 0x0 0x4000>,
++			<0x4 0x48000000 0x0 0x4000000>,
++			<0x4 0x49320000 0x0 0x4000>,
++			<0x4 0x49344000 0x0 0x4000>,
++			<0x4 0x4a800000 0x0 0x800000>;
++		apple,bw-scratch = <&pmgr_dcp 0 4 0x1218>;
++		apple,iomfb-surfaces = <1 1 0 1>;
++		power-domains = <&DIE_NODE(ps_dispext1_cpu)>;
++		resets = <&DIE_NODE(ps_dispext1_cpu)>;
++		clocks = <&DIE_NODE(clk_dispext1)>;
++		phandle = <&DIE_NODE(dcpext1)>;
++		apple,dcp-index = <1>;
++		status = "disabled";
++		// required bus properties for 'piodma' subdevice
++		#address-cells = <2>;
++		#size-cells = <2>;
++
++		piodma {
++			iommus = <&DIE_NODE(dispext1_dart) 4 0x100 0x0 0x10 0x0>;
++		};
++
++		ports {
++			#address-cells = <1>;
++			#size-cells = <0>;
++			port@0 {
++				reg = <0>;
++				/* DIE_NODE(dcpext1_audio): endpoint { */
++				/* 	remote-endpoint = <&DIE_NODE(dpaudio1_dcp)>; */
++				/* }; */
++			};
++		};
++	};
++
++	DIE_NODE(dispext2_dart): iommu@44d304000 {
++		compatible = "apple,t6031-dart", "apple,t8110-dart";
++		reg = <0x4 0x4d304000 0x0 0x4000>;
++		#iommu-cells = <5>;
++		interrupt-parent = <&aic>;
++		interrupts = <AIC_IRQ DIE_NO 1119 IRQ_TYPE_LEVEL_HIGH>;
++		power-domains = <&DIE_NODE(ps_dispext2_cpu)>;
++		status = "disabled";
++	};
++
++	DIE_NODE(dcpext2_dart): iommu@44d30c000 {
++		compatible = "apple,t6031-dart", "apple,t8110-dart";
++		reg = <0x4 0x4d30c000 0x0 0x4000>;
++		#iommu-cells = <5>;
++		interrupt-parent = <&aic>;
++		interrupts = <AIC_IRQ DIE_NO 1119 IRQ_TYPE_LEVEL_HIGH>;
++		power-domains = <&DIE_NODE(ps_dispext2_cpu)>;
++		status = "disabled";
++	};
++
++	DIE_NODE(dcpext2_mbox): mbox@44ec08000 {
++		compatible = "apple,t6031-asc-mailbox", "apple,asc-mailbox-v4";
++		reg = <0x4 0x4ec08000 0x0 0x4000>;
++		interrupt-parent = <&aic>;
++		interrupts = <AIC_IRQ DIE_NO 1140 IRQ_TYPE_LEVEL_HIGH>,
++			<AIC_IRQ DIE_NO 1141 IRQ_TYPE_LEVEL_HIGH>,
++			<AIC_IRQ DIE_NO 1142 IRQ_TYPE_LEVEL_HIGH>,
++			<AIC_IRQ DIE_NO 1143 IRQ_TYPE_LEVEL_HIGH>;
++		interrupt-names = "send-empty", "send-not-empty",
++			"recv-empty", "recv-not-empty";
++		#mbox-cells = <0>;
++		power-domains = <&DIE_NODE(ps_dispext2_cpu)>;
++		resets = <&DIE_NODE(ps_dispext2_cpu)>;
++		status = "disabled";
++	};
++
++	DIE_NODE(dcpext2):  dcp@44ec00000 {
++		compatible = "apple,t6031-dcpext", "apple,dcpext";
++		mboxes = <&DIE_NODE(dcpext2_mbox)>;
++		mbox-names = "mbox";
++		iommus = <&DIE_NODE(dcpext2_dart) 5 0x100 0x0 0x10 0x0>;
++
++		reg-names = "coproc", "disp-0", "disp-1", "disp-2", "disp-3";
++		reg = <0x4 0x4ec00000 0x0 0x4000>,
++			<0x4 0x4c000000 0x0 0x4000000>,
++			<0x4 0x4d320000 0x0 0x4000>,
++			<0x4 0x4d344000 0x0 0x4000>,
++			<0x4 0x4e800000 0x0 0x800000>;
++		apple,bw-scratch = <&pmgr_dcp 0 4 0x1220>;
++		apple,iomfb-surfaces = <1 1 0 1>;
++		power-domains = <&DIE_NODE(ps_dispext2_cpu)>;
++		resets = <&DIE_NODE(ps_dispext2_cpu)>;
++		clocks = <&DIE_NODE(clk_dispext2)>;
++		phandle = <&DIE_NODE(dcpext2)>;
++		apple,dcp-index = <2>;
++		status = "disabled";
++		// required bus properties for 'piodma' subdevice
++		#address-cells = <2>;
++		#size-cells = <2>;
++
++		piodma {
++			iommus = <&DIE_NODE(dispext2_dart) 4 0x100 0x0 0x10 0x0>;
++		};
++
++		ports {
++			#address-cells = <1>;
++			#size-cells = <0>;
++			port@0 {
++				reg = <0>;
++				/* DIE_NODE(dcpext2_audio): endpoint { */
++				/* 	remote-endpoint = <&DIE_NODE(dpaudio1_dcp)>; */
++				/* }; */
++			};
++		};
++	};
++
+ 	DIE_NODE(usb4_0_mbox): mailbox@701108000 {
+ 		compatible = "apple,t6031-asc-mailbox",
+ 			"apple,asc-mailbox-v4";
+diff --git a/arch/arm64/boot/dts/apple/t6031-j514c.dts b/arch/arm64/boot/dts/apple/t6031-j514c.dts
+index ec53b88a..00785efc 100644
+--- a/arch/arm64/boot/dts/apple/t6031-j514c.dts
++++ b/arch/arm64/boot/dts/apple/t6031-j514c.dts
+@@ -17,6 +17,13 @@ / {
+ 	model = "Apple MacBook Pro (14-inch, M3 Max, 16 CPU cores, Nov 2023)";
+ };
+ 
++&panel {
++	compatible = "apple,panel-j514c", "apple,panel-mini-led", "apple,panel";
++	width-mm = <302>;
++	height-mm = <196>;
++	adj-height-mm = <189>;
++};
++
+ &mtp_mt {
+ 	firmware-name = "apple/tpmtfw-j514c.bin";
+ };
+diff --git a/arch/arm64/boot/dts/apple/t6031-j516c.dts b/arch/arm64/boot/dts/apple/t6031-j516c.dts
+index 9e447741..5c6baecf 100644
+--- a/arch/arm64/boot/dts/apple/t6031-j516c.dts
++++ b/arch/arm64/boot/dts/apple/t6031-j516c.dts
+@@ -17,6 +17,13 @@ / {
+ 	model = "Apple MacBook Pro (16-inch, M3 Max, 16 CPU cores, Nov 2023)";
+ };
+ 
++&panel {
++	compatible = "apple,panel-j516c", "apple,panel-mini-led", "apple,panel";
++	width-mm = <346>;
++	height-mm = <223>;
++	adj-height-mm = <216>;
++};
++
+ &mtp_mt {
+ 	firmware-name = "apple/tpmtfw-j516c.bin";
+ };
+diff --git a/arch/arm64/boot/dts/apple/t6031.dtsi b/arch/arm64/boot/dts/apple/t6031.dtsi
+index 60df7a3e..2840893d 100644
+--- a/arch/arm64/boot/dts/apple/t6031.dtsi
++++ b/arch/arm64/boot/dts/apple/t6031.dtsi
+@@ -22,6 +22,13 @@ / {
+ 	#address-cells = <2>;
+ 	#size-cells = <2>;
+ 
++	aliases {
++		dcpext0 = &dcpext0;
++		dcpext1 = &dcpext1;
++		dcpext2 = &dcpext2;
++		dcpext3 = &dcpext3;
++	};
++
+ 	soc: soc {
+ 		compatible = "simple-bus";
+ 		#address-cells = <2>;
+diff --git a/arch/arm64/boot/dts/apple/t6032.dtsi b/arch/arm64/boot/dts/apple/t6032.dtsi
+index 0f13bf1a..9295d686 100644
+--- a/arch/arm64/boot/dts/apple/t6032.dtsi
++++ b/arch/arm64/boot/dts/apple/t6032.dtsi
+@@ -24,6 +24,17 @@ / {
+ 	#address-cells = <2>;
+ 	#size-cells = <2>;
+ 
++	aliases {
++		dcpext0 = &dcpext0;
++		dcpext1 = &dcpext1;
++		dcpext2 = &dcpext2;
++		dcpext3 = &dcpext3;
++		dcpext4 = &dcpext0_die1;
++		dcpext5 = &dcpext1_die1;
++		dcpext6 = &dcpext2_die1;
++		dcpext7 = &dcpext3_die1;
++	};
++
+ 	cpus {
+ 		#address-cells = <2>;
+ 		#size-cells = <0>;
+@@ -345,14 +356,6 @@ &die1 {
+ #undef DIE
+ #undef DIE_NO
+ 
+-/* delete non-present DISP power-states */
+-/delete-node/ &ps_disp_cpu;
+-/delete-node/ &ps_disp_cpu_die1;
+-/delete-node/ &ps_disp_fe;
+-/delete-node/ &ps_disp_fe_die1;
+-/delete-node/ &ps_disp_sys;
+-/delete-node/ &ps_disp_sys_die1;
+-
+ /* delete non-present ISP power-states */
+ /delete-node/ &isp_dart0;
+ /delete-node/ &isp_dart1;
+diff --git a/arch/arm64/boot/dts/apple/t6034-j514m.dts b/arch/arm64/boot/dts/apple/t6034-j514m.dts
+index f9c2b624..af48a2d4 100644
+--- a/arch/arm64/boot/dts/apple/t6034-j514m.dts
++++ b/arch/arm64/boot/dts/apple/t6034-j514m.dts
+@@ -17,6 +17,13 @@ / {
+ 	model = "Apple MacBook Pro (14-inch, M3 Max, 14 CPU cores, Nov 2023)";
+ };
+ 
++&panel {
++	compatible = "apple,panel-j514m", "apple,panel-mini-led", "apple,panel";
++	width-mm = <302>;
++	height-mm = <196>;
++	adj-height-mm = <189>;
++};
++
+ &mtp_mt {
+ 	firmware-name = "apple/tpmtfw-j514m.bin";
+ };
+diff --git a/arch/arm64/boot/dts/apple/t6034-j516m.dts b/arch/arm64/boot/dts/apple/t6034-j516m.dts
+index 22ad5251..b64bf7a7 100644
+--- a/arch/arm64/boot/dts/apple/t6034-j516m.dts
++++ b/arch/arm64/boot/dts/apple/t6034-j516m.dts
+@@ -17,6 +17,13 @@ / {
+ 	model = "Apple MacBook Pro (16-inch, M3 Max, 14 CPU cores, Nov 2023)";
+ };
+ 
++&panel {
++	compatible = "apple,panel-j516m", "apple,panel-mini-led", "apple,panel";
++	width-mm = <346>;
++	height-mm = <223>;
++	adj-height-mm = <216>;
++};
++
+ &mtp_mt {
+ 	firmware-name = "apple/tpmtfw-j516m.bin";
+ };
+diff --git a/arch/arm64/boot/dts/apple/t603x-j514-j516.dtsi b/arch/arm64/boot/dts/apple/t603x-j514-j516.dtsi
+index 74fd80bc..9f4fa57a 100644
+--- a/arch/arm64/boot/dts/apple/t603x-j514-j516.dtsi
++++ b/arch/arm64/boot/dts/apple/t603x-j514-j516.dtsi
+@@ -41,6 +41,10 @@ aliases {
+ 		usb4_1_nhi = &usb4_1_nhi;
+ 		usb4_2_rc = &usb4_2_acio;
+ 		usb4_2_nhi = &usb4_2_nhi;
++
++		dcp = &dcp;
++		disp0 = &display;
++		disp0_piodma = &disp0_piodma;
+ 	};
+ 
+ 	chosen {
+@@ -76,6 +80,12 @@ led-0 {
+ 	};
+ };
+ 
++&dcp {
++	panel: panel {
++		apple,max-brightness = <500>;
++	};
++};
++
+ &serial0 {
+ 	status = "okay";
+ };
+diff --git a/arch/arm64/boot/dts/apple/t8122-j504.dts b/arch/arm64/boot/dts/apple/t8122-j504.dts
+index 4c36e01b..3c9a0595 100644
+--- a/arch/arm64/boot/dts/apple/t8122-j504.dts
++++ b/arch/arm64/boot/dts/apple/t8122-j504.dts
+@@ -31,6 +31,13 @@ led-0 {
+ 	};
+ };
+ 
++&panel {
++	compatible = "apple,panel-j504", "apple,panel";
++	width-mm = <302>;
++	height-mm = <196>;
++	adj-height-mm = <189>;
++};
++
+ &wifi0 {
+ 	brcm,board-type = "apple,tresco";
+ };
+diff --git a/arch/arm64/boot/dts/apple/t8122-j613.dts b/arch/arm64/boot/dts/apple/t8122-j613.dts
+index aa9e49dc..b3740b14 100644
+--- a/arch/arm64/boot/dts/apple/t8122-j613.dts
++++ b/arch/arm64/boot/dts/apple/t8122-j613.dts
+@@ -31,6 +31,13 @@ led-0 {
+ 	};
+ };
+ 
++&panel {
++	compatible = "apple,panel-j613", "apple,panel";
++	width-mm = <290>;
++	height-mm = <189>;
++	adj-height-mm = <181>;
++};
++
+ &wifi0 {
+ 	brcm,board-type = "apple,dnieper";
+ };
+@@ -202,3 +209,82 @@ &isp {
+ };
+ 
+ #include "hwmon-laptop.dtsi"
++
++/*
++ * fay: DisplayPort alt mode on the left-back USB-C port (typec0, atc0), the
++ * way Asahi's fairydust branch does it for t8112/t602x. Values from the
++ * macOS ADT on this model: dcpext is display-crossbar ufp1, port 0, so the
++ * t602x-type crossbar state is 2 (dispext1,0); atc0-dpxbar sits at
++ * 0x70304c000 with compatible "atc-dpxbar,t602x". dcpext itself is enabled
++ * by m1n1 once its firmware is reserved.
++ */
++/ {
++	aliases {
++		dcpext = &dcpext;
++	};
++};
++
++&display {
++	iommus = <&disp_dart 0>, <&dispext0_dart 0 0x100 0x0 0x10 0x0>;
++};
++
++&dispext0_dart {
++	status = "okay";
++};
++
++&dcpext_dart {
++	status = "okay";
++};
++
++&dcpext_mbox {
++	status = "okay";
++};
++
++&atcphy0_xbar {
++	status = "okay";
++};
++
++&dcpext {
++	apple,connector-type = "DP";
++	apple,dptx-phy = <0>;
++	phys = <&atcphy0 PHY_TYPE_DP>;
++	phy-names = "dp-phy";
++	mux-controls = <&atcphy0_xbar 0>;
++	mux-control-names = "dp-xbar";
++	mux-index = <2>;
++	/* fay: as in PR #607 (J514s) */
++	apple,sync-syslog-ack;
++
++	ports {
++		#address-cells = <1>;
++		#size-cells = <0>;
++
++		port@1 {
++			reg = <1>;
++
++			dcpext_dpout: endpoint {
++				remote-endpoint = <&atcphy0_dp>;
++			};
++		};
++	};
++};
++
++&atcphy0 {
++	ports {
++		port@2 {
++			reg = <2>;
++
++			atcphy0_dp: endpoint {
++				remote-endpoint = <&dcpext_dpout>;
++			};
++		};
++	};
++};
++
++&ps_atc0_common {
++	apple,always-on;
++};
++
++&typec0 {
++	displayport = <&dcpext>;
++};
+diff --git a/arch/arm64/boot/dts/apple/t8122-j615.dts b/arch/arm64/boot/dts/apple/t8122-j615.dts
+index 99e6fd33..044a1f40 100644
+--- a/arch/arm64/boot/dts/apple/t8122-j615.dts
++++ b/arch/arm64/boot/dts/apple/t8122-j615.dts
+@@ -31,6 +31,13 @@ led-0 {
+ 	};
+ };
+ 
++&panel {
++	compatible = "apple,panel-j615", "apple,panel";
++	width-mm = <290>; // TODO
++	height-mm = <189>; // TODO
++	adj-height-mm = <181>;
++};
++
+ &aop_mbox {
+ 	status = "okay";
+ };
+diff --git a/arch/arm64/boot/dts/apple/t8122-jxxx.dtsi b/arch/arm64/boot/dts/apple/t8122-jxxx.dtsi
+index 375a5ec3..6af8e9be 100644
+--- a/arch/arm64/boot/dts/apple/t8122-jxxx.dtsi
++++ b/arch/arm64/boot/dts/apple/t8122-jxxx.dtsi
+@@ -26,6 +26,11 @@ aliases {
+ 		usb4_0_nhi = &usb4_0_nhi;
+ 		usb4_1_rc = &usb4_1_acio;
+ 		usb4_1_nhi = &usb4_1_nhi;
++
++		dcp = &dcp;
++		disp0 = &display;
++                dcpext0 = &dcpext;
++		disp0_piodma = &disp_piodma;
+ 	};
+ 
+ 	chosen {
+@@ -57,6 +62,13 @@ memory@800000000 {
+ 	};
+ };
+ 
++&dcp {
++	panel: panel {
++		apple,max-brightness = <500>;
++	};
++};
++
++
+ &serial0 {
+ 	status = "okay";
+ };
+diff --git a/arch/arm64/boot/dts/apple/t8122.dtsi b/arch/arm64/boot/dts/apple/t8122.dtsi
+index 94ba8d75..930599f0 100644
+--- a/arch/arm64/boot/dts/apple/t8122.dtsi
++++ b/arch/arm64/boot/dts/apple/t8122.dtsi
+@@ -364,6 +364,21 @@ nco_clkref: clock-ref-nco {
+ 		clock-output-names = "nco_ref";
+ 	};
+ 
++	clk_disp: clock-disp {
++		compatible = "fixed-clock";
++		#clock-cells = <0>;
++		clock-frequency = <257142848>;
++		clock-output-names = "clk_disp";
++	};
++
++
++	clk_dispext0: clock-dispext0 {
++		compatible = "fixed-clock";
++		#clock-cells = <0>;
++		clock-frequency = <0>;
++		clock-output-names = "clk_dispext0";
++	};
++
+ 	soc {
+ 		compatible = "simple-bus";
+ 		#address-cells = <2>;
+@@ -650,6 +665,12 @@ p-core-pmu-affinity {
+ 			};
+ 		};
+ 
++		pmgr_dcp: power-management@2d03d0000 {
++			reg = <0x2 0xd03d0000 0x0 0x4000>;
++			reg-names = "dcp-fw-pmgr";
++			#apple,bw-scratch-cells = <3>;
++		};
++
+ 		pmgr: power-management@2d0700000 {
+ 			compatible = "apple,t8122-pmgr", "apple,t8103-pmgr", "syscon", "simple-mfd";
+ 			#address-cells = <1>;
+@@ -909,6 +930,88 @@ pinctrl_smc: pinctrl@2ec820000 {
+ 				     <AIC_IRQ 499 IRQ_TYPE_LEVEL_HIGH>;
+ 		};
+ 
++
++		disp_dart: iommu@28d304000 {
++			compatible = "apple,t8122-dart", "apple,t8110-dart";
++			reg = <0x2 0x8d304000 0x0 0x4000>;
++			#iommu-cells = <1>;
++			interrupt-parent = <&aic>;
++			interrupts = <AIC_IRQ 557 IRQ_TYPE_LEVEL_HIGH>;
++			status = "disabled";
++			power-domains = <&ps_disp_cpu>;
++			apple,dma-range = <0x100 0x0 0x10 0x0>;
++		};
++
++		dcp_dart: iommu@28d30c000 {
++			compatible = "apple,t8122-dart", "apple,t8110-dart";
++			reg = <0x2 0x8d30c000 0x0 0x4000>;
++			#iommu-cells = <1>;
++			interrupt-parent = <&aic>;
++			interrupts = <AIC_IRQ 557 IRQ_TYPE_LEVEL_HIGH>;
++			power-domains = <&ps_disp_cpu>;
++			apple,dma-range = <0x100 0x0 0x10 0x0>;
++		};
++
++		dcp_mbox: mbox@28ec08000 {
++			compatible = "apple,t8122-asc-mailbox", "apple,asc-mailbox-v4";
++			reg = <0x2 0x8ec08000 0x0 0x4000>;
++			interrupt-parent = <&aic>;
++			interrupts = <AIC_IRQ 537 IRQ_TYPE_LEVEL_HIGH>,
++				<AIC_IRQ 538 IRQ_TYPE_LEVEL_HIGH>,
++				<AIC_IRQ 539 IRQ_TYPE_LEVEL_HIGH>,
++				<AIC_IRQ 540 IRQ_TYPE_LEVEL_HIGH>;
++			interrupt-names = "send-empty", "send-not-empty",
++				"recv-empty", "recv-not-empty";
++			#mbox-cells = <0>;
++			power-domains = <&ps_disp_cpu>;
++		};
++
++		dcp: dcp@28ec00000 {
++			compatible = "apple,t8122-dcp", "apple,dcp";
++			mboxes = <&dcp_mbox>;
++			mbox-names = "mbox";
++			iommus = <&dcp_dart 5>;
++			reg-names = "coproc", "disp-0", "disp-1", "disp-2", "disp-3", "disp-4";
++			reg = <0x2 0x8ec00000 0x0 0x4000>, // check?
++				<0x2 0x8c000000 0x0 0x690000>,
++                                <0x2 0x8c800000 0x0 0x690000>,
++				<0x2 0x8d320000 0x0 0x4000>,
++				<0x2 0x8d344000 0x0 0x4000>,
++				<0x2 0x8e800000 0x0 0x800000>;
++			apple,bw-scratch = <&pmgr_dcp 0 5 0x908>;
++			apple,iomfb-surfaces = <1 1 0 1>;
++			power-domains = <&ps_disp_cpu>;
++			resets = <&ps_disp_cpu>;
++			clocks = <&clk_disp>;
++			phandle = <&dcp>;
++			// required bus properties for 'piodma' subdevice
++			#address-cells = <2>;
++			#size-cells = <2>;
++
++			disp_piodma: piodma {
++				iommus = <&disp_dart 4>;
++				phandle = <&disp_piodma>;
++			};
++
++			ports {
++				#address-cells = <1>;
++				#size-cells = <0>;
++				port@0 {
++					reg = <0>;
++					/* dcp_audio: endpoint { */
++					/* 	remote-endpoint = <&dpaudio0_dcp>; */
++					/* }; */
++				};
++			};
++		};
++
++		display: display-subsystem {
++			compatible = "apple,display-subsystem";
++			iommus = <&disp_dart 0>;
++			/* generate phandle explicitly for use in loader */
++			phandle = <&display>;
++		};
++
+ 		aop_mbox: mbox@2f4408000 {
+ 			compatible = "apple,t8122-asc-mailbox", "apple,asc-mailbox-v4";
+ 			reg = <0x2 0xf4408000 0x0 0x4000>;
+@@ -1116,6 +1219,84 @@ nvme: nvme@30dcc0000 {
+ 			resets = <&ps_ans>;
+ 		};
+ 
++		dispext0_dart: iommu@319304000 {
++			compatible = "apple,t8122-dart", "apple,t8110-dart";
++			reg = <0x3 0x19304000 0x0 0x4000>;
++			#iommu-cells = <5>;
++			interrupt-parent = <&aic>;
++			interrupts = <AIC_IRQ 599 IRQ_TYPE_LEVEL_HIGH>;
++			power-domains = <&ps_dispext_cpu>;
++			status = "disabled";
++		};
++
++		dcpext_dart: iommu@31930c000 {
++			compatible = "apple,t8122-dart", "apple,t8110-dart";
++			reg = <0x3 0x1930c000 0x0 0x4000>;
++			#iommu-cells = <5>;
++			interrupt-parent = <&aic>;
++			interrupts = <AIC_IRQ 599 IRQ_TYPE_LEVEL_HIGH>;
++			power-domains = <&ps_dispext_cpu>;
++			status = "disabled";
++		};
++
++		dcpext_mbox: mbox@31ac08000 {
++			compatible = "apple,t8122-asc-mailbox", "apple,asc-mailbox-v4";
++			reg = <0x3 0x1ac08000 0x0 0x4000>;
++			interrupt-parent = <&aic>;
++			interrupts = <AIC_IRQ 582 IRQ_TYPE_LEVEL_HIGH>,
++				<AIC_IRQ 583 IRQ_TYPE_LEVEL_HIGH>,
++				<AIC_IRQ 584 IRQ_TYPE_LEVEL_HIGH>,
++				<AIC_IRQ 585 IRQ_TYPE_LEVEL_HIGH>;
++			interrupt-names = "send-empty", "send-not-empty",
++			"recv-empty", "recv-not-empty";
++			#mbox-cells = <0>;
++			power-domains = <&ps_dispext_cpu>;
++			resets = <&ps_dispext_cpu>;
++			status = "disabled";
++		};
++
++		dcpext: dcp@31ac00000 {
++			compatible = "apple,t8122-dcpext", "apple,dcpext";
++			mboxes = <&dcpext_mbox>;
++			mbox-names = "mbox";
++			iommus = <&dcpext_dart 5 0x8 0x00000000 0x7 0xffff0000>;
++			phandle = <&dcpext>;
++
++			/* fay: disp-1 (0x318800000) was missing; ADT dispext0 has 6 ranges */
++			reg-names = "coproc", "disp-0", "disp-1", "disp-2", "disp-3", "disp-4";
++			reg = <0x3 0x1ac00000 0x0 0x4000>,
++			      <0x3 0x18000000 0x0 0x690000>,
++			      <0x3 0x18800000 0x0 0x690000>,
++			      <0x3 0x19320000 0x0 0x4000>,
++			      <0x3 0x19344000 0x0 0x4000>,
++			      <0x3 0x1a800000 0x0 0x800000>;
++			apple,bw-scratch = <&pmgr_dcp 0 5 0x910>;
++			apple,iomfb-surfaces = <1 1 0 1>;
++			power-domains = <&ps_dispext_cpu>;
++			resets = <&ps_dispext_cpu>;
++			clocks = <&clk_dispext0>;
++			apple,dcp-index = <1>;
++			status = "disabled";
++			// required bus properties for 'piodma' subdevice
++			#address-cells = <2>;
++			#size-cells = <2>;
++
++			piodma {
++				iommus = <&dispext0_dart 4 0x0 0x0 0xf 0xffff0000>;
++			};
++
++			ports {
++				#address-cells = <1>;
++				#size-cells = <0>;
++				port@0 {
++					reg = <0>;
++					/* dcpext_audio: endpoint { */
++					/* 	remote-endpoint = <&dpaudio1_dcp>; */
++					/* }; */
++				};
++			};
++		};
++
+ 		pcie0: pcie@580000000 {
+ 			compatible = "apple,t8122-pcie", "apple,t6020-pcie";
+ 			device_type = "pci";
+@@ -1446,6 +1627,14 @@ atcphy0: phy@703000000 {
+ 			power-domains = <&ps_atc0_usb>;
+ 		};
+ 
++		atcphy0_xbar: mux@70304c000 {
++			compatible = "apple,t8122-display-crossbar", "apple,t6020-display-crossbar";
++			reg = <0x7 0x0304c000 0x0 0x4000>;
++			#mux-control-cells = <1>;
++			power-domains = <&ps_atc0_usb>;
++			status = "disabled";
++		};
++
+ 		usb4_1_mbox: mailbox@b01108000 {
+ 			compatible = "apple,t8122-asc-mailbox",
+ 				"apple,asc-mailbox-v4";
+@@ -1612,6 +1801,14 @@ atcphy1: phy@b03000000 {
+ 			mode-switch;
+ 			power-domains = <&ps_atc1_usb>;
+ 		};
++
++		atcphy1_xbar: mux@b0304c000 {
++			compatible = "apple,t8122-display-crossbar", "apple,t6020-display-crossbar";
++			reg = <0xb 0x0304c000 0x0 0x4000>;
++			#mux-control-cells = <1>;
++			power-domains = <&ps_atc1_usb>;
++			status = "disabled";
++		};
+ 	};
+ };
+ 
+diff --git a/drivers/gpu/drm/apple/afk.c b/drivers/gpu/drm/apple/afk.c
+index b7f16298..5156bfe3 100644
+--- a/drivers/gpu/drm/apple/afk.c
++++ b/drivers/gpu/drm/apple/afk.c
+@@ -2,8 +2,10 @@
+ /* Copyright 2022 Sven Peter <sven@svenpeter.dev> */
+ 
+ #include <linux/bitfield.h>
++#include <linux/delay.h>
+ #include <linux/debugfs.h>
+ #include <linux/dma-mapping.h>
++#include <linux/jiffies.h>
+ #include <linux/kconfig.h>
+ #include <linux/of_platform.h>
+ #include <linux/slab.h>
+@@ -101,17 +103,40 @@ void afk_shutdown(struct apple_dcp_afkep *afkep)
+ 
+ int afk_start(struct apple_dcp_afkep *ep)
+ {
++	unsigned long timeout;
+ 	int ret;
+ 
+ 	reinit_completion(&ep->started);
+-	apple_rtkit_start_ep(ep->dcp->rtk, ep->endpoint);
++	ret = apple_rtkit_start_ep(ep->dcp->rtk, ep->endpoint);
++	if (ret)
++		return dev_err_probe(ep->dcp->dev, ret,
++				     "Failed to start AFK endpoint %02x\n",
++				     ep->endpoint);
++
++	/* Allow firmware to instantiate the endpoint after RTKit START_ENDPOINT. */
++	usleep_range(10000, 11000);
+ 	afk_send(ep, FIELD_PREP(RBEP_TYPE, RBEP_INIT));
+ 
+-	ret = wait_for_completion_timeout(&ep->started, msecs_to_jiffies(1000));
+-	if (ret <= 0)
+-		return -ETIMEDOUT;
+-	else
+-		return 0;
++	/*
++	 * Poll because ASCWrap v6 can leave messages queued without another
++	 * recv-not-empty interrupt after RTKit bootstrap.
++	 */
++	timeout = jiffies + msecs_to_jiffies(1000);
++	do {
++		ret = apple_rtkit_poll(ep->dcp->rtk);
++		if (ret < 0)
++			return ret;
++
++		ret = wait_for_completion_timeout(&ep->started,
++						  msecs_to_jiffies(10));
++		if (ret > 0)
++			return 0;
++	} while (time_before(jiffies, timeout));
++
++	dev_err(ep->dcp->dev,
++		"RTKit AFK endpoint %02x did not acknowledge init\n",
++		ep->endpoint);
++	return -ETIMEDOUT;
+ }
+ 
+ static void afk_getbuf(struct apple_dcp_afkep *ep, u64 message)
+@@ -569,7 +594,12 @@ static void afk_recv_handle(struct apple_dcp_afkep *ep, u32 channel, u32 type,
+ 	    subtype == EPIC_SUBTYPE_TEARDOWN)
+ 		return afk_recv_handle_teardown(ep, channel);
+ 
+-	if (type == EPIC_TYPE_REPLY && eshdr->category == EPIC_CAT_REPLY)
++	/* Firmware 14.7 may label standard-service replies as notifications. */
++	if (eshdr->category == EPIC_CAT_REPLY &&
++	    (type == EPIC_TYPE_REPLY ||
++	     (ep->dcp->fw_compat >= DCP_FIRMWARE_V_14_7 &&
++	      type == EPIC_TYPE_NOTIFY &&
++	      subtype == EPIC_SUBTYPE_STD_SERVICE)))
+ 		return afk_recv_handle_reply(ep, channel,
+ 					     le16_to_cpu(eshdr->tag), payload,
+ 					     payload_size);
+diff --git a/drivers/gpu/drm/apple/apple_drv.c b/drivers/gpu/drm/apple/apple_drv.c
+index d8386f3e..9f99516b 100644
+--- a/drivers/gpu/drm/apple/apple_drv.c
++++ b/drivers/gpu/drm/apple/apple_drv.c
+@@ -574,7 +574,8 @@ static int add_dcp_components(struct device *dev,
+ 				 * collection for the Apple display-subsystem so
+ 				 * ignore it here.
+ 				 */
+-				if (of_device_is_compatible(port, "apple,t8103-atcphy")) {
++				if (of_device_is_compatible(port, "apple,t8103-atcphy") ||
++				    of_device_is_compatible(port, "apple,t8122-atcphy")) {
+ 					of_node_put(port);
+ 					continue;
+ 				}
+diff --git a/drivers/gpu/drm/apple/epic/dpavservep.c b/drivers/gpu/drm/apple/epic/dpavservep.c
+index 2de9d2fe..058a4a1b 100644
+--- a/drivers/gpu/drm/apple/epic/dpavservep.c
++++ b/drivers/gpu/drm/apple/epic/dpavservep.c
+@@ -81,10 +81,12 @@ struct dpavserv_copy_edid_cmd {
+ #define EDID_BUF_SIZE			(EDID_LEADING_DATA_SIZE + EDID_MAX_SIZE)
+ 
+ struct dpavserv_copy_edid_resp {
+-	__le64 max_size;
+-	u8 _pad1[24];
+-	__le64 used_size;
+-	u8 _pad2[8];
++	__le32 max_size;
++	u8 _pad1[12];
++	__le32 retcode;
++	u8 _pad2[12];
++	__le32 used_size;
++	u8 _pad3[12];
+ 	u8 data[];
+ } __packed;
+ 
+@@ -160,7 +162,7 @@ const struct drm_edid *dcpavserv_copy_edid(struct apple_epic_service *service)
+ 	struct dpavserv_copy_edid_cmd cmd;
+ 	struct dpavserv_copy_edid_resp *resp __free(kfree) = NULL;
+ 	int num_blocks;
+-	u64 data_size;
++	u32 data_size;
+ 	int ret;
+ 
+ 	memset(&cmd, 0, sizeof(cmd));
+@@ -170,18 +172,17 @@ const struct drm_edid *dcpavserv_copy_edid(struct apple_epic_service *service)
+ 		return ERR_PTR(-ENOMEM);
+ 
+ 	ret = afk_service_call(service, 1, 7, &cmd, sizeof(cmd), EDID_BUF_SIZE, resp,
+-			       sizeof(resp) + EDID_BUF_SIZE, 0);
++			       sizeof(*resp) + EDID_BUF_SIZE, 0);
+ 	if (ret < 0)
+ 		return ERR_PTR(ret);
+ 
+-	if (le64_to_cpu(resp->max_size) != EDID_BUF_SIZE)
++	if (le32_to_cpu(resp->max_size) != EDID_BUF_SIZE ||
++	    le32_to_cpu(resp->retcode))
+ 		return ERR_PTR(-EIO);
+ 
+-	// print_hex_dump(KERN_DEBUG, "dpavserv EDID cmd: ", DUMP_PREFIX_NONE,
+-	// 	       16, 1, resp, 192, true);
+-
+-	data_size = le64_to_cpu(resp->used_size);
+-	if (data_size < EDID_LEADING_DATA_SIZE + EDID_BLOCK_SIZE)
++	data_size = le32_to_cpu(resp->used_size);
++	if (data_size > EDID_BUF_SIZE ||
++	    data_size < EDID_LEADING_DATA_SIZE + EDID_BLOCK_SIZE)
+ 		return ERR_PTR(-EIO);
+ 
+ 	num_blocks = resp->data[EDID_LEADING_DATA_SIZE + EDID_EXT_BLOCK_COUNT_OFFSET];
+@@ -226,8 +227,8 @@ int dpavservep_init(struct apple_dcp *dcp)
+ 
+ 	ret = wait_for_completion_timeout(&dcp->dcpavserv.enable_completion,
+ 					  msecs_to_jiffies(1000));
+-	if (ret >= 0)
++	if (ret > 0)
+ 		return 0;
+ 
+-	return ret;
++	return -ETIMEDOUT;
+ }
+diff --git a/drivers/gpu/drm/apple/iomfb_template.c b/drivers/gpu/drm/apple/iomfb_template.c
+index a41db294..058575b2 100644
+--- a/drivers/gpu/drm/apple/iomfb_template.c
++++ b/drivers/gpu/drm/apple/iomfb_template.c
+@@ -472,8 +472,25 @@ static struct DCP_FW_NAME(dcp_map_reg_resp) dcpep_cb_map_reg(struct apple_dcp *d
+ 	} else {
+ 		struct resource *rsrc = dcp->disp_registers[req->index];
+ #if DCP_FW_VER >= DCP_FW_VERSION(13, 2, 0)
+-		dma_addr_t dva = dma_map_resource(dcp->dev, rsrc->start, resource_size(rsrc),
+-						  DMA_BIDIRECTIONAL, 0);
++		dma_addr_t dva;
++
++		/*
++		 * In "Dashboard" RT bandwidth mode (bw-scratch without a
++		 * bw-doorbell, e.g. t8122) the firmware's only write through
++		 * this mapping is a 64-bit zero to the pmgr dashboard on
++		 * power-off. dart-dcp rejects it (FILL_REGION|NO_PTE) and the
++		 * DCP crashes, so hand the firmware a RAM page instead.
++		 */
++		if (dcp->disp_bw_scratch_index && !dcp->disp_bw_doorbell_index &&
++		    req->index == dcp->disp_bw_scratch_index) {
++			if (!dmam_alloc_coherent(dcp->dev, resource_size(rsrc),
++						 &dva, GFP_KERNEL))
++				dva = DMA_MAPPING_ERROR;
++		} else {
++			dva = dma_map_resource(dcp->dev, rsrc->start,
++					       resource_size(rsrc),
++					       DMA_BIDIRECTIONAL, 0);
++		}
+ 		WARN_ON(dva == DMA_MAPPING_ERROR);
+ #endif
+ 
+diff --git a/drivers/gpu/drm/apple/iomfb_v14_7.c b/drivers/gpu/drm/apple/iomfb_v14_7.c
+index 19f38cb0..ceee1c1a 100644
+--- a/drivers/gpu/drm/apple/iomfb_v14_7.c
++++ b/drivers/gpu/drm/apple/iomfb_v14_7.c
+@@ -58,8 +58,8 @@ static const iomfb_cb_handler cb_handlers[IOMFB_MAX_CB] = {
+ 	[111] = trampoline_true, /* create_iomfb_service */
+ 	[112] = trampoline_create_backlight_service,
+ 	[113] = trampoline_true, /* create_nvram_service? */
+-	//[114] = trampoline_get_tiling_state,
+-	//[115] = trampoline_false, /* set_tiling_state */
++	[115] = trampoline_get_tiling_state,
++	[116] = trampoline_false, /* set_tiling_state */
+ 	[121] = dcpep_cb_boot_1, /* is_dark_boot */
+ 	[122] = trampoline_false, /* is_dark_boot / is_waking_from_hibernate*/
+ 	[123] = trampoline_false,
+diff --git a/drivers/gpu/drm/apple/parser.c b/drivers/gpu/drm/apple/parser.c
+index 56960fa1..b3676236 100644
+--- a/drivers/gpu/drm/apple/parser.c
++++ b/drivers/gpu/drm/apple/parser.c
+@@ -590,6 +590,8 @@ struct dcp_display_mode *enumerate_modes(struct dcp_parse_ctx *handle,
+ 
+ 	for (; it.idx < it.len; ++it.idx) {
+ 		mode = &modes[*count];
++		/* Clear optional fields and data left by a failed parse. */
++		memset(mode, 0, sizeof(*mode));
+ 		ret = parse_mode(it.handle, mode, &score, width_mm, height_mm, notch_height);
+ 
+ 		/* Errors for a single mode are recoverable -- just skip it. */
+diff --git a/drivers/phy/apple/atc.c b/drivers/phy/apple/atc.c
+index 0fe15742..d08b19c9 100644
+--- a/drivers/phy/apple/atc.c
++++ b/drivers/phy/apple/atc.c
+@@ -431,6 +431,129 @@ enum atcphy_lane_mode {
+ #define LN_LDOCLK_EN_BIG_OV BIT(14)
+ #define LN_LDOCLK_EN_BIG BIT(15)
+ 
++/* T8122 DisplayPort registers; power bit names inferred from the sequences */
++#define ACIOPHY_CFG1 0x000c
++#define ACIOPHY_SLEEP_CTRL_T8122 0x010c
++#define ACIOPHY_TX_SLEEP_BIG(lane) BIT(lane)
++#define ACIOPHY_TX_SLEEP_BIG_OV(lane) BIT(2 + (lane))
++#define ACIOPHY_TX_SLEEP_SMALL(lane) BIT(4 + (lane))
++#define ACIOPHY_TX_SLEEP_SMALL_OV(lane) BIT(6 + (lane))
++#define ACIOPHY_TX_CLAMP(lane) BIT(8 + (lane))
++#define ACIOPHY_TX_CLAMP_OV(lane) BIT(10 + (lane))
++#define ACIOPHY_RXTX_SLEEP_BIG(lane) BIT(lane)
++#define ACIOPHY_RXTX_SLEEP_BIG_OV(lane) BIT(2 + (lane))
++#define ACIOPHY_RXTX_SLEEP_SMALL(lane) BIT(4 + (lane))
++#define ACIOPHY_RXTX_SLEEP_SMALL_OV(lane) BIT(6 + (lane))
++#define ACIOPHY_RX_SLEEP_BIG(lane) BIT(6 + (lane))
++#define ACIOPHY_RX_SLEEP_BIG_OV(lane) BIT(8 + (lane))
++#define ACIOPHY_RX_SLEEP_SMALL(lane) BIT(10 + (lane))
++#define ACIOPHY_RX_SLEEP_SMALL_OV(lane) BIT(12 + (lane))
++#define ACIOPHY_RX_CLAMP(lane) BIT(14 + (lane))
++#define ACIOPHY_RX_CLAMP_OV(lane) BIT(16 + (lane))
++
++#define AUSPLL_BGR_T8122 0x2218
++#define AUSPLL_FREQ_CFG_T8122 0x2234
++#define AUSPLL_CLKOUT_MASTER_PCLK_DRVR_EN_T8122 BIT(3)
++#define ACIOPHY_DP_PCLK_STAT_T8122 0x7034
++
++#define LN_AUSPMA_TX_TOP_EQ1 0x0050
++#define LN_AUSPMA_TX_TOP_EQ17 0x00d0
++#define LN_AUSPMA_TX_TOP_EQ18 0x00d4
++#define LN_AUSPMA_RX_TOP_EQ1 0x0210
++#define LN_AUSPMA_RX_TOP_EQ17 0x0244
++#define LN_AUSPMA_RX_TOP_EQ18 0x0248
++#define LN_EQ_SWING GENMASK(3, 0)
++#define LN_EQ_SWING_LSB GENMASK(15, 14)
++#define LN_EQ_SWING_OV BIT(28)
++#define LN_EQ_AUTO_CTRL_DP BIT(20)
++/* Deemphasis and override bits; individual fields unknown */
++#define LN_EQ_DEEMPH_FIELDS GENMASK(18, 0)
++
++#define LN_AUSPMA_TX_SHM_MAIN2 0x0004
++#define LN_MAIN2_BYTECLK_SYNC_SEL BIT(24)
++#define LN_MAIN2_BYTECLK_SYNC_SEL_OV BIT(25)
++#define LN_MAIN2_BYTECLK_SYNC_EN BIT(28)
++#define LN_MAIN2_BYTECLK_SYNC_EN_OV BIT(29)
++#define LN_AUSPMA_TX_SHM_MAIN4 0x000c
++#define LN_MAIN4_DIV2_4_EN GENMASK(25, 24)
++#define LN_MAIN4_DIV2_4_EN_OV BIT(26)
++#define LN_AUSPMA_TX_SHM_MAIN5 0x0010
++#define LN_MAIN5_CLK_EN BIT(9)
++#define LN_MAIN5_CLK_EN_OV BIT(10)
++#define LN_AUSPMA_TX_SHM_CLKMON1 0x001c
++#define LN_CLKMON1_HIZ BIT(22)
++#define LN_CLKMON1_HIZ_OV BIT(23)
++#define LN_AUSPMA_TX_SHM_LDOCLK1 0x0044
++#define LN_LDOCLK1_VREG_ADJ GENMASK(10, 6)
++#define LN_LDOCLK1_VREF_EN BIT(12)
++#define LN_LDOCLK1_VREF_FILTER_BOOST (GENMASK(18, 17) | GENMASK(15, 14))
++#define LN_LDOCLK1_BYPASS_SMALL BIT(20)
++#define LN_LDOCLK1_BYPASS_BIG BIT(22)
++#define LN_LDOCLK1_EN_SMALL BIT(24)
++#define LN_LDOCLK1_EN_BIG BIT(26)
++
++#define LN_AUSPMA_RX_TOP_TXMODE 0x0160
++#define LN_AUSPMA_RX_TOP_AFE1 0x01d4
++#define LN_AFE1_DIV20_RESET_N_OV BIT(0)
++#define LN_AFE1_DIV20_RESET_N BIT(1)
++#define LN_AUSPMA_RX_TOP_DCO1 0x01dc
++#define LN_DCO1_LPBKIN_RECOVERED_DATA GENMASK(16, 15)
++
++#define LN_AUSPMA_RX_SHM_CTLE2 0x0030
++#define LN_CTLE2_TX_CLK_EN BIT(10)
++#define LN_CTLE2_TX_CLK_EN_OV BIT(11)
++#define LN_AUSPMA_RX_SHM_DFE101 0x0064
++#define LN_DFE101_DFEH1FB_EN BIT(2)
++#define LN_DFE101_DFEH1FB_EN_OV BIT(3)
++#define LN_DFE101_DTVREG_ADJUST_FIELDS GENMASK(15, 10)
++#define LN_AUSPMA_RX_SHM_DFE111 0x0068
++#define LN_DFE111_DTVREG_BIG_EN BIT(5)
++#define LN_DFE111_DTVREG_BIG_EN_OV BIT(6)
++#define LN_DFE111_DTVREG_SMALL_EN BIT(7)
++#define LN_DFE111_DTVREG_SMALL_EN_OV BIT(8)
++#define LN_AUSPMA_RX_SHM_DFE121 0x006c
++#define LN_DFE121_TX_BYTECLK_SYNC_CLR BIT(9)
++#define LN_DFE121_TX_BYTECLK_SYNC_CLR_OV BIT(10)
++#define LN_DFE121_TX_BYTECLK_SYNC_EN BIT(11)
++#define LN_DFE121_TX_HRCLK_SEL BIT(13)
++#define LN_DFE121_TX_HRCLK_SEL_OV BIT(14)
++#define LN_DFE121_TX_PBIAS_EN BIT(15)
++#define LN_DFE121_TX_PBIAS_EN_OV BIT(16)
++#define LN_AUSPMA_RX_SHM_SAVOS161 0x00a4
++#define LN_SAVOS161_RXTERM_EN BIT(0)
++#define LN_SAVOS161_RXTERM_EN_OV BIT(1)
++#define LN_AUSPMA_RX_SHM_TERM191 0x00a8
++#define LN_TERM191_TX_TEST_EN BIT(15)
++#define LN_TERM191_TX_TEST_EN_OV BIT(16)
++#define LN_TERM191_TX_EN BIT(17)
++#define LN_TERM191_TX_EN_OV BIT(18)
++#define LN_TERM191_TX_DIV2_EN GENMASK(20, 19)
++#define LN_TERM191_TX_DIV2_EN_OV BIT(21)
++#define LN_TERM191_TX_DIV2_RST BIT(22)
++#define LN_TERM191_TX_DIV2_RST_OV BIT(23)
++#define LN_AUSPMA_RX_SHM_VREF221 0x00d4
++/* Adjust, filter and enable overrides; individual fields unknown */
++#define LN_VREF221_INIT_FIELDS (GENMASK(20, 16) | GENMASK(12, 7))
++#define LN_VREF221_BIAS_FIELDS GENMASK(15, 13)
++#define LN_VREF221_EN BIT(16)
++#define LN_VREF221_FILTER_ADJUST GENMASK(19, 18)
++#define LN_AUSPMA_RX_SHM_VREF231 0x00d8
++#define LN_VREF231_BOOST_CTRL GENMASK(1, 0)
++#define LN_VREF231_BOOST_CTRL_OV BIT(2)
++#define LN_AUSPMA_RX_SHM_VREG1 0x00dc
++#define LN_VREG1_DTVREG_POWER_MODE GENMASK(4, 3)
++
++/* T8122 AUX registers (core window) */
++#define AUX_TOP_CTRL 0x16000
++#define AUX_TOP_PWRDN BIT(0)
++#define AUX_SHM_PWR 0x16400
++#define AUX_SLEEP_SML_OV BIT(0)
++#define AUX_SLEEP_SML BIT(1)
++#define AUX_SLEEP_BIG_OV BIT(2)
++#define AUX_SLEEP_BIG BIT(3)
++#define AUX_CLAMP_OV BIT(8)
++#define AUX_CLAMP BIT(9)
++
+ /* LPDPTX registers */
+ #define LPDPTX_AUX_CFG_BLK_AUX_CTRL 0x0000
+ #define LPDPTX_BLK_AUX_CTRL_PWRDN BIT(4)
+@@ -529,6 +652,9 @@ enum atcphy_dp_link_rate {
+ 	ATCPHY_DP_LINK_RATE_HBR3,
+ };
+ 
++#define ATCPHY_DP_LINK_RATE_IDLE		(-1)
++#define ATCPHY_DP_LINK_RATE_PENDING	(-2)
++
+ /**
+  * enum atcphy_pipehandler_state - States of the PIPE mux interface ("pipehandler")
+  * @ATCPHY_PIPEHANDLER_STATE_DUMMY: "Dummy PHY" (disables USB3, USB2 only)
+@@ -597,8 +723,16 @@ struct atcphy_mode_configuration {
+ 
+ struct apple_atcphy;
+ 
++struct atcphy_dp_ops {
++	void (*enable_aux)(struct apple_atcphy *atcphy);
++	void (*disable_aux)(struct apple_atcphy *atcphy);
++	int (*set_rate)(struct apple_atcphy *atcphy, enum atcphy_dp_link_rate lr);
++	int (*stop)(struct apple_atcphy *atcphy);
++};
++
+ struct atcphy_hw {
+ 	void (*configure_post_tunable)(struct apple_atcphy *, enum atcphy_mode);
++	const struct atcphy_dp_ops *dp;
+ 	enum atcphy_generation gen;
+ 	int aciophy_lane_mode;
+ 	int aciophy_crossbar;
+@@ -616,7 +750,8 @@ struct atcphy_hw {
+  * @tunables.lane_usb4: USB4 lane-specific tunables
+  * @mode: Current PHY operating mode
+  * @swap_lanes: True if lanes must be swapped due to cable orientation
+- * @dp_link_rate: DisplayPort link rate
++ * @dp_link_rate: DisplayPort link rate index, ATCPHY_DP_LINK_RATE_IDLE, or
++ *               ATCPHY_DP_LINK_RATE_PENDING when cleanup is still needed
+  * @pipehandler_up: True if the PIPE mux ("pipehandler") is set to USB3 or USB4 mode
+  * @regs: Memory-mapped registers
+  * @regs.core: Core registers
+@@ -880,6 +1015,28 @@ static const struct atcphy_dp_link_rate_configuration dp_lr_config[] = {
+ 	},
+ };
+ 
++static const struct {
++	u8 vclk_op_divn;
++	bool vclk_pre_divn;
++} dp_lr_config_t8122[] = {
++	[ATCPHY_DP_LINK_RATE_RBR] = {
++		.vclk_op_divn = 1,
++		.vclk_pre_divn = false,
++	},
++	[ATCPHY_DP_LINK_RATE_HBR] = {
++		.vclk_op_divn = 1,
++		.vclk_pre_divn = false,
++	},
++	[ATCPHY_DP_LINK_RATE_HBR2] = {
++		.vclk_op_divn = 1,
++		.vclk_pre_divn = true,
++	},
++	[ATCPHY_DP_LINK_RATE_HBR3] = {
++		.vclk_op_divn = 1,
++		.vclk_pre_divn = true,
++	},
++};
++
+ static inline void mask32(void __iomem *reg, u32 mask, u32 set)
+ {
+ 	u32 value = readl(reg);
+@@ -914,6 +1071,12 @@ static inline void core_clear32(struct apple_atcphy *atcphy, u32 reg, u32 clear)
+ 	core_mask32(atcphy, reg, clear, 0);
+ }
+ 
++static void __iomem *atcphy_lane_reg(struct apple_atcphy *atcphy,
++				  unsigned int lane, u32 lane0_reg)
++{
++	return atcphy->regs.core + lane0_reg + lane * (LN1_AUSPMA_RX_TOP - LN0_AUSPMA_RX_TOP);
++}
++
+ static const struct atcphy_mode_configuration *atcphy_get_mode_config(struct apple_atcphy *atcphy,
+ 								      enum atcphy_mode mode)
+ {
+@@ -968,7 +1131,7 @@ static void atcphy_apply_tunables(struct apple_atcphy *atcphy, enum atcphy_mode
+ 
+ static int atcphy_pipehandler_lock(struct apple_atcphy *atcphy)
+ {
+-	int ret;
++	int ret, retries = 10;
+ 	u32 reg;
+ 
+ 	if (readl(atcphy->regs.pipehandler + PIPEHANDLER_LOCK_REQ) & PIPEHANDLER_LOCK_EN) {
+@@ -976,15 +1139,17 @@ static int atcphy_pipehandler_lock(struct apple_atcphy *atcphy)
+ 		return 0;
+ 	}
+ 
+-	set32(atcphy->regs.pipehandler + PIPEHANDLER_LOCK_REQ, PIPEHANDLER_LOCK_EN);
+-
+-	ret = readl_poll_timeout(atcphy->regs.pipehandler + PIPEHANDLER_LOCK_ACK, reg,
+-				 reg & PIPEHANDLER_LOCK_EN, 10, PIPEHANDLER_LOCK_ACK_TIMEOUT_US);
+-	if (ret) {
+-		clear32(atcphy->regs.pipehandler + PIPEHANDLER_LOCK_REQ, 1);
+-		dev_warn(atcphy->dev, "Pipehandler lock not acked.\n");
+-	}
++	do {
++		set32(atcphy->regs.pipehandler + PIPEHANDLER_LOCK_REQ, PIPEHANDLER_LOCK_EN);
++		ret = readl_poll_timeout(atcphy->regs.pipehandler + PIPEHANDLER_LOCK_ACK, reg,
++					 reg & PIPEHANDLER_LOCK_EN, 10, PIPEHANDLER_LOCK_ACK_TIMEOUT_US);
++		if (!ret)
++			return 0;
++		clear32(atcphy->regs.pipehandler + PIPEHANDLER_LOCK_REQ, PIPEHANDLER_LOCK_EN);
++		usleep_range(5000, 10000);
++	} while (--retries);
+ 
++	dev_warn(atcphy->dev, "Pipehandler lock not acked.\n");
+ 	return ret;
+ }
+ 
+@@ -1368,12 +1533,392 @@ static void atcphy_configure_lanes(struct apple_atcphy *atcphy, enum atcphy_mode
+ 	}
+ }
+ 
+-static void atcphy_enable_dp_aux(struct apple_atcphy *atcphy)
++static int atcphy_dp_poll(struct apple_atcphy *atcphy, u32 reg, u32 mask, u32 expected)
+ {
+-	/* FIXME */
+-	if (atcphy->hw->gen == ATCPHY_GENERATION_T8122)
+-		return;
++	u32 value;
++	int ret;
++
++	lockdep_assert_held(&atcphy->lock);
++	ret = readl_poll_timeout_atomic(atcphy->regs.core + reg, value,
++					(value & mask) == expected, 1, 1000);
++	if (ret)
++		dev_err(atcphy->dev, "DP timeout reg=%#x mask=%#x want=%#x got=%#x\n",
++			reg, mask, expected, value);
++	return ret;
++}
++
++static int atcphy_auspll_set_command(struct apple_atcphy *atcphy, u32 command, bool request)
++{
++	core_mask32(atcphy, AUSPLL_APB_CMD_OVERRIDE,
++		    AUSPLL_APB_CMD_OVERRIDE_REQ | AUSPLL_APB_CMD_OVERRIDE_CMD |
++		    AUSPLL_APB_CMD_OVERRIDE_UNK28,
++		    FIELD_PREP(AUSPLL_APB_CMD_OVERRIDE_CMD, command) |
++		    AUSPLL_APB_CMD_OVERRIDE_UNK28 | (request ? AUSPLL_APB_CMD_OVERRIDE_REQ : 0));
++	return atcphy_dp_poll(atcphy, AUSPLL_APB_CMD_OVERRIDE, AUSPLL_APB_CMD_OVERRIDE_ACK,
++			     request ? AUSPLL_APB_CMD_OVERRIDE_ACK : 0);
++}
++
++static int atcphy_dp_start_pll_t8122(struct apple_atcphy *atcphy,
++				  enum atcphy_dp_link_rate lr)
++{
++	const struct atcphy_dp_link_rate_configuration *cfg = &dp_lr_config[lr];
++	int ret;
++
++	core_clear32(atcphy, AUSPLL_FREQ_CFG_T8122, AUSPLL_FREQ_REFCLK);
++	core_mask32(atcphy, ACIOPHY_LANE_DP_CFG_BLK_TX_DP_CTRL0,
++		    DPTX_PCLK1_SELECT | DPTX_PCLK2_SELECT | DPRX_PCLK_SELECT,
++		    FIELD_PREP(DPTX_PCLK1_SELECT, 1) | FIELD_PREP(DPTX_PCLK2_SELECT, 1) |
++		    FIELD_PREP(DPRX_PCLK_SELECT, 1));
++	core_mask32(atcphy, AUSPLL_FREQ_DESC_A, U32_MAX,
++		    FIELD_PREP(AUSPLL_FD_FREQ_COUNT_TARGET, cfg->freqinit_count_target) |
++		    FIELD_PREP(AUSPLL_FD_KI_MAN, 8) | FIELD_PREP(AUSPLL_FD_KI_EXP, 3) |
++		    FIELD_PREP(AUSPLL_FD_KP_MAN, 8) | FIELD_PREP(AUSPLL_FD_KP_EXP, 7));
++	core_mask32(atcphy, AUSPLL_FREQ_DESC_B, U32_MAX,
++		    FIELD_PREP(AUSPLL_FD_FBDIVN_FRAC_DEN, cfg->fbdivn_frac_den) |
++		    FIELD_PREP(AUSPLL_FD_FBDIVN_FRAC_NUM, cfg->fbdivn_frac_num));
++	core_mask32(atcphy, AUSPLL_FREQ_DESC_C, U32_MAX,
++		    FIELD_PREP(AUSPLL_FD_PCLK_DIV_SEL, cfg->pclk_div_sel) |
++		    FIELD_PREP(AUSPLL_FD_LFSDM_DIV, 1) |
++		    FIELD_PREP(AUSPLL_FD_LFCLK_CTRL, cfg->lfclk_ctrl) |
++		    FIELD_PREP(AUSPLL_FD_VCLK_OP_DIVN, dp_lr_config_t8122[lr].vclk_op_divn) |
++		    (dp_lr_config_t8122[lr].vclk_pre_divn ? AUSPLL_FD_VCLK_PRE_DIVN : 0));
++	core_mask32(atcphy, AUSPLL_CLKOUT_DIV, AUSPLL_CLKOUT_PLLA_REFBUFCLK_DI,
++		    FIELD_PREP(AUSPLL_CLKOUT_PLLA_REFBUFCLK_DI, 7));
++	core_set32(atcphy, AUSPLL_BGR_T8122, AUSPLL_BGR_CTRL_AVAIL);
++	core_set32(atcphy, AUSPLL_CLKOUT_MASTER, AUSPLL_CLKOUT_MASTER_PCLK_DRVR_EN_T8122);
++	ret = atcphy_auspll_set_command(atcphy, 0, true);
++	if (ret)
++		return ret;
++	ret = atcphy_dp_poll(atcphy, ACIOPHY_DP_PCLK_STAT_T8122, ACIOPHY_AUSPLL_LOCK,
++			     ACIOPHY_AUSPLL_LOCK);
++	if (ret)
++		return ret;
++	return atcphy_auspll_set_command(atcphy, 0x2800, false);
++}
++
++static void atcphy_dp_power_on_tx_t8122(struct apple_atcphy *atcphy, unsigned int lane)
++{
++	core_set32(atcphy, ACIOPHY_SLEEP_CTRL_T8122, ACIOPHY_TX_SLEEP_SMALL(lane));
++	core_set32(atcphy, ACIOPHY_SLEEP_CTRL_T8122, ACIOPHY_TX_SLEEP_SMALL_OV(lane));
++	udelay(1);
++	core_set32(atcphy, ACIOPHY_SLEEP_CTRL_T8122, ACIOPHY_TX_SLEEP_BIG(lane));
++	core_set32(atcphy, ACIOPHY_SLEEP_CTRL_T8122, ACIOPHY_TX_SLEEP_BIG_OV(lane));
++	udelay(1);
++	core_clear32(atcphy, ACIOPHY_SLEEP_CTRL_T8122, ACIOPHY_TX_CLAMP(lane));
++	core_set32(atcphy, ACIOPHY_SLEEP_CTRL_T8122, ACIOPHY_TX_CLAMP_OV(lane));
++	udelay(1);
++}
++
++static void atcphy_dp_power_on_rxtx_t8122(struct apple_atcphy *atcphy, unsigned int lane)
++{
++	core_set32(atcphy, ACIOPHY_CFG1, ACIOPHY_RXTX_SLEEP_SMALL(lane));
++	core_set32(atcphy, ACIOPHY_CFG1, ACIOPHY_RXTX_SLEEP_SMALL_OV(lane));
++	udelay(1);
++	core_set32(atcphy, ACIOPHY_CFG1, ACIOPHY_RXTX_SLEEP_BIG(lane));
++	core_set32(atcphy, ACIOPHY_CFG1, ACIOPHY_RXTX_SLEEP_BIG_OV(lane));
++	udelay(1);
++	core_set32(atcphy, ACIOPHY_CFG0, ACIOPHY_RX_SLEEP_SMALL(lane));
++	core_set32(atcphy, ACIOPHY_CFG0, ACIOPHY_RX_SLEEP_SMALL_OV(lane));
++	udelay(1);
++	core_set32(atcphy, ACIOPHY_CFG0, ACIOPHY_RX_SLEEP_BIG(lane));
++	core_set32(atcphy, ACIOPHY_CFG0, ACIOPHY_RX_SLEEP_BIG_OV(lane));
++	udelay(1);
++	core_clear32(atcphy, ACIOPHY_CFG0, ACIOPHY_RX_CLAMP(lane));
++	core_set32(atcphy, ACIOPHY_CFG0, ACIOPHY_RX_CLAMP_OV(lane));
++	udelay(1);
++}
++
++static void atcphy_dp_configure_tx_t8122(struct apple_atcphy *atcphy, unsigned int lane,
++					 const struct atcphy_dp_link_rate_configuration *cfg)
++{
++	void __iomem *shm = atcphy_lane_reg(atcphy, lane, LN0_AUSPMA_TX_SHM);
++	void __iomem *top = atcphy_lane_reg(atcphy, lane, LN0_AUSPMA_TX_TOP);
++
++	atcphy_dp_power_on_tx_t8122(atcphy, lane);
++	/* Fixed LDO initialization value, not a calibration tunable. */
++	mask32(shm + LN_AUSPMA_TX_SHM_LDOCLK1, U32_MAX, 0x0aafb800);
++	udelay(1);
++	set32(shm + LN_AUSPMA_TX_SHM_LDOCLK1, LN_LDOCLK1_EN_SMALL);
++	udelay(1);
++	set32(shm + LN_AUSPMA_TX_SHM_LDOCLK1, LN_LDOCLK1_EN_BIG);
++	udelay(1);
++	mask32(shm + LN_AUSPMA_TX_SHM_LDOCLK1, LN_LDOCLK1_VREG_ADJ,
++	       FIELD_PREP(LN_LDOCLK1_VREG_ADJ, 12));
++	udelay(1);
++	clear32(shm + LN_AUSPMA_TX_SHM_LDOCLK1, LN_LDOCLK1_VREF_FILTER_BOOST);
++	udelay(1);
++	set32(top + LN_AUSPMA_TX_TOP_EQ17, LN_EQ_AUTO_CTRL_DP);
++	clear32(top + LN_AUSPMA_TX_TOP_EQ1, LN_EQ_SWING | LN_EQ_SWING_LSB);
++	set32(top + LN_AUSPMA_TX_TOP_EQ18, LN_EQ_SWING_OV);
++	mask32(top + LN_AUSPMA_TX_TOP_EQ17, LN_EQ_DEEMPH_FIELDS, 1);
++	if (cfg->txa_ldoclk_bypass) {
++		set32(shm + LN_AUSPMA_TX_SHM_LDOCLK1, LN_LDOCLK1_BYPASS_SMALL);
++		udelay(1);
++		set32(shm + LN_AUSPMA_TX_SHM_LDOCLK1, LN_LDOCLK1_BYPASS_BIG);
++		udelay(1);
++	}
++	mask32(shm + LN_AUSPMA_TX_SHM_MAIN2,
++	       LN_MAIN2_BYTECLK_SYNC_SEL | LN_MAIN2_BYTECLK_SYNC_SEL_OV,
++	       LN_MAIN2_BYTECLK_SYNC_SEL_OV);
++	set32(shm + LN_AUSPMA_TX_SHM_MAIN2, LN_MAIN2_BYTECLK_SYNC_EN | LN_MAIN2_BYTECLK_SYNC_EN_OV);
++	mask32(shm + LN_AUSPMA_TX_SHM_MAIN4, LN_MAIN4_DIV2_4_EN | LN_MAIN4_DIV2_4_EN_OV,
++	       FIELD_PREP(LN_MAIN4_DIV2_4_EN, cfg->txa_div2_en) | LN_MAIN4_DIV2_4_EN_OV);
++	set32(shm + LN_AUSPMA_TX_SHM_MAIN5, LN_MAIN5_CLK_EN | LN_MAIN5_CLK_EN_OV);
++	mask32(shm + LN_AUSPMA_TX_SHM_CLKMON1, LN_CLKMON1_HIZ | LN_CLKMON1_HIZ_OV,
++	       LN_CLKMON1_HIZ_OV);
++}
++
++static void atcphy_dp_configure_rxtx_t8122(struct apple_atcphy *atcphy, unsigned int lane,
++					   const struct atcphy_dp_link_rate_configuration *cfg)
++{
++	void __iomem *shm = atcphy_lane_reg(atcphy, lane, LN0_AUSPMA_RX_SHM);
++	void __iomem *top = atcphy_lane_reg(atcphy, lane, LN0_AUSPMA_RX_TOP);
++
++	set32(top + LN_AUSPMA_RX_TOP_TXMODE, LN_RX_TXMODE);
++	set32(top + LN_AUSPMA_RX_TOP_DCO1, LN_DCO1_LPBKIN_RECOVERED_DATA);
++	mask32(shm + LN_AUSPMA_RX_SHM_SAVOS161, LN_SAVOS161_RXTERM_EN | LN_SAVOS161_RXTERM_EN_OV,
++	       LN_SAVOS161_RXTERM_EN_OV);
++	mask32(shm + LN_AUSPMA_RX_SHM_TERM191, LN_TERM191_TX_TEST_EN | LN_TERM191_TX_TEST_EN_OV,
++	       LN_TERM191_TX_TEST_EN_OV);
++	mask32(shm + LN_AUSPMA_RX_SHM_DFE121, LN_DFE121_TX_PBIAS_EN | LN_DFE121_TX_PBIAS_EN_OV,
++	       LN_DFE121_TX_PBIAS_EN_OV);
++	mask32(shm + LN_AUSPMA_RX_SHM_VREF221, LN_VREF221_INIT_FIELDS, 0x121180);
++	mask32(shm + LN_AUSPMA_RX_SHM_DFE101, LN_DFE101_DTVREG_ADJUST_FIELDS, 0xb800);
++	mask32(shm + LN_AUSPMA_RX_SHM_VREF231,
++	       LN_VREF231_BOOST_CTRL | LN_VREF231_BOOST_CTRL_OV,
++	       LN_VREF231_BOOST_CTRL_OV);
++	clear32(shm + LN_AUSPMA_RX_SHM_VREG1, LN_VREG1_DTVREG_POWER_MODE);
++	mask32(shm + LN_AUSPMA_RX_SHM_VREF221, LN_VREF221_BIAS_FIELDS, 0xc000);
++	udelay(1);
++	atcphy_dp_power_on_rxtx_t8122(atcphy, lane);
++	set32(shm + LN_AUSPMA_RX_SHM_DFE121, LN_DFE121_TX_BYTECLK_SYNC_EN);
++	mask32(top + LN_AUSPMA_RX_TOP_AFE1, LN_AFE1_DIV20_RESET_N | LN_AFE1_DIV20_RESET_N_OV,
++	       LN_AFE1_DIV20_RESET_N_OV);
++	udelay(1);
++	set32(top + LN_AUSPMA_RX_TOP_AFE1, LN_AFE1_DIV20_RESET_N);
++	mask32(shm + LN_AUSPMA_RX_SHM_DFE121,
++	       LN_DFE121_TX_BYTECLK_SYNC_CLR | LN_DFE121_TX_BYTECLK_SYNC_CLR_OV,
++	       LN_DFE121_TX_BYTECLK_SYNC_CLR_OV);
++	udelay(1);
++	mask32(shm + LN_AUSPMA_RX_SHM_VREF221, LN_VREF221_EN | LN_VREF221_FILTER_ADJUST,
++	       LN_VREF221_EN | FIELD_PREP(LN_VREF221_FILTER_ADJUST, 1));
++	mask32(shm + LN_AUSPMA_RX_SHM_VREF231, LN_VREF231_BOOST_CTRL,
++	       FIELD_PREP(LN_VREF231_BOOST_CTRL, 1));
++	udelay(1);
++	clear32(shm + LN_AUSPMA_RX_SHM_VREF221, LN_VREF221_FILTER_ADJUST);
++	udelay(1);
++	set32(shm + LN_AUSPMA_RX_SHM_DFE111,
++	      LN_DFE111_DTVREG_SMALL_EN | LN_DFE111_DTVREG_SMALL_EN_OV);
++	udelay(1);
++	set32(shm + LN_AUSPMA_RX_SHM_DFE111, LN_DFE111_DTVREG_BIG_EN | LN_DFE111_DTVREG_BIG_EN_OV);
++	udelay(1);
++	mask32(shm + LN_AUSPMA_RX_SHM_VREF231, LN_VREF231_BOOST_CTRL,
++	       FIELD_PREP(LN_VREF231_BOOST_CTRL, 3));
++	udelay(1);
++	mask32(shm + LN_AUSPMA_RX_SHM_VREF231, LN_VREF231_BOOST_CTRL,
++	       FIELD_PREP(LN_VREF231_BOOST_CTRL, 2));
++	udelay(1);
++	clear32(shm + LN_AUSPMA_RX_SHM_VREF231, LN_VREF231_BOOST_CTRL);
++	udelay(1);
++	set32(shm + LN_AUSPMA_RX_SHM_TERM191, LN_TERM191_TX_EN | LN_TERM191_TX_EN_OV);
++	udelay(1);
++	mask32(shm + LN_AUSPMA_RX_SHM_DFE121, LN_DFE121_TX_HRCLK_SEL | LN_DFE121_TX_HRCLK_SEL_OV,
++	       LN_DFE121_TX_HRCLK_SEL_OV);
++	clear32(top + LN_AUSPMA_RX_TOP_EQ1, LN_EQ_SWING | LN_EQ_SWING_LSB);
++	set32(top + LN_AUSPMA_RX_TOP_EQ18, LN_EQ_SWING_OV);
++	mask32(top + LN_AUSPMA_RX_TOP_EQ17, LN_EQ_DEEMPH_FIELDS, 0x1f81);
++	mask32(shm + LN_AUSPMA_RX_SHM_TERM191, LN_TERM191_TX_DIV2_EN | LN_TERM191_TX_DIV2_EN_OV,
++	       FIELD_PREP(LN_TERM191_TX_DIV2_EN, cfg->txa_div2_en) | LN_TERM191_TX_DIV2_EN_OV);
++	mask32(shm + LN_AUSPMA_RX_SHM_TERM191, LN_TERM191_TX_DIV2_RST | LN_TERM191_TX_DIV2_RST_OV,
++	       LN_TERM191_TX_DIV2_RST_OV);
++	udelay(1);
++	set32(shm + LN_AUSPMA_RX_SHM_CTLE2, LN_CTLE2_TX_CLK_EN | LN_CTLE2_TX_CLK_EN_OV);
++	udelay(1);
++}
++
++static void atcphy_dp_stop_lane_t8122(struct apple_atcphy *atcphy, unsigned int lane)
++{
++	void __iomem *tx = atcphy_lane_reg(atcphy, lane, LN0_AUSPMA_TX_SHM);
++	void __iomem *rx = atcphy_lane_reg(atcphy, lane, LN0_AUSPMA_RX_SHM);
++	void __iomem *top = atcphy_lane_reg(atcphy, lane, LN0_AUSPMA_RX_TOP);
++
++	set32(tx + LN_AUSPMA_TX_SHM_CLKMON1, LN_CLKMON1_HIZ | LN_CLKMON1_HIZ_OV);
++	mask32(tx + LN_AUSPMA_TX_SHM_MAIN5, LN_MAIN5_CLK_EN | LN_MAIN5_CLK_EN_OV,
++	       LN_MAIN5_CLK_EN_OV);
++	mask32(tx + LN_AUSPMA_TX_SHM_MAIN2, LN_MAIN2_BYTECLK_SYNC_EN | LN_MAIN2_BYTECLK_SYNC_EN_OV,
++	       LN_MAIN2_BYTECLK_SYNC_EN_OV);
++	udelay(1);
++	clear32(tx + LN_AUSPMA_TX_SHM_LDOCLK1, LN_LDOCLK1_BYPASS_SMALL);
++	udelay(1);
++	clear32(tx + LN_AUSPMA_TX_SHM_LDOCLK1, LN_LDOCLK1_BYPASS_BIG);
++	udelay(1);
++	clear32(tx + LN_AUSPMA_TX_SHM_LDOCLK1, LN_LDOCLK1_EN_BIG);
++	udelay(1);
++	clear32(tx + LN_AUSPMA_TX_SHM_LDOCLK1, LN_LDOCLK1_EN_SMALL);
++	udelay(1);
++	clear32(tx + LN_AUSPMA_TX_SHM_LDOCLK1, LN_LDOCLK1_VREF_EN);
++	core_set32(atcphy, ACIOPHY_SLEEP_CTRL_T8122, ACIOPHY_TX_CLAMP(lane));
++	udelay(1);
++	core_clear32(atcphy, ACIOPHY_SLEEP_CTRL_T8122, ACIOPHY_TX_SLEEP_BIG(lane));
++	udelay(1);
++	core_clear32(atcphy, ACIOPHY_SLEEP_CTRL_T8122, ACIOPHY_TX_SLEEP_SMALL(lane));
++	udelay(1);
++
++	mask32(rx + LN_AUSPMA_RX_SHM_CTLE2, LN_CTLE2_TX_CLK_EN | LN_CTLE2_TX_CLK_EN_OV,
++	       LN_CTLE2_TX_CLK_EN_OV);
++	udelay(1);
++	set32(rx + LN_AUSPMA_RX_SHM_TERM191, LN_TERM191_TX_DIV2_RST | LN_TERM191_TX_DIV2_RST_OV);
++	udelay(1);
++	mask32(rx + LN_AUSPMA_RX_SHM_TERM191, LN_TERM191_TX_EN | LN_TERM191_TX_EN_OV,
++	       LN_TERM191_TX_EN_OV);
++	mask32(rx + LN_AUSPMA_RX_SHM_DFE111, LN_DFE111_DTVREG_BIG_EN | LN_DFE111_DTVREG_BIG_EN_OV,
++	       LN_DFE111_DTVREG_BIG_EN_OV);
++	udelay(1);
++	mask32(rx + LN_AUSPMA_RX_SHM_DFE111,
++	       LN_DFE111_DTVREG_SMALL_EN | LN_DFE111_DTVREG_SMALL_EN_OV,
++	       LN_DFE111_DTVREG_SMALL_EN_OV);
++	udelay(1);
++	clear32(rx + LN_AUSPMA_RX_SHM_VREF221, LN_VREF221_EN);
++	udelay(1);
++	set32(rx + LN_AUSPMA_RX_SHM_DFE121,
++	      LN_DFE121_TX_BYTECLK_SYNC_CLR | LN_DFE121_TX_BYTECLK_SYNC_CLR_OV);
++	mask32(top + LN_AUSPMA_RX_TOP_AFE1, LN_AFE1_DIV20_RESET_N | LN_AFE1_DIV20_RESET_N_OV,
++	       LN_AFE1_DIV20_RESET_N_OV);
++	clear32(rx + LN_AUSPMA_RX_SHM_DFE121, LN_DFE121_TX_BYTECLK_SYNC_EN);
++	core_set32(atcphy, ACIOPHY_CFG0, ACIOPHY_RX_CLAMP(lane));
++	udelay(1);
++	core_clear32(atcphy, ACIOPHY_CFG0, ACIOPHY_RX_SLEEP_BIG(lane));
++	udelay(1);
++	core_clear32(atcphy, ACIOPHY_CFG0, ACIOPHY_RX_SLEEP_SMALL(lane));
++	udelay(1);
++	core_clear32(atcphy, ACIOPHY_CFG1, ACIOPHY_RXTX_SLEEP_BIG(lane));
++	udelay(1);
++	core_clear32(atcphy, ACIOPHY_CFG1, ACIOPHY_RXTX_SLEEP_SMALL(lane));
++	udelay(1);
++}
++
++static int atcphy_dp_start_link_t8122(struct apple_atcphy *atcphy, u8 pmas,
++				   enum atcphy_dp_link_rate lr)
++{
++	const struct atcphy_dp_link_rate_configuration *cfg = &dp_lr_config[lr];
++	int ret;
++
++	lockdep_assert_held(&atcphy->lock);
++	if (!pmas || pmas > 3)
++		return -EINVAL;
++	ret = atcphy_dp_start_pll_t8122(atcphy, lr);
++	if (ret)
++		return ret;
++	/* Set both feedback overrides before releasing the shared lane reset. */
++	for (unsigned int lane = 0; lane < 2; lane++) {
++		void __iomem *shm = atcphy_lane_reg(atcphy, lane, LN0_AUSPMA_RX_SHM);
++
++		if (pmas & BIT(lane))
++			mask32(shm + LN_AUSPMA_RX_SHM_DFE101,
++			       LN_DFE101_DFEH1FB_EN | LN_DFE101_DFEH1FB_EN_OV,
++			       LN_DFE101_DFEH1FB_EN_OV);
++	}
++	core_set32(atcphy, ACIOPHY_LANE_DP_CFG_BLK_TX_DP_CTRL0,
++		   DPTXPHY_PMA_LANE_RESET_N | DPTXPHY_PMA_LANE_RESET_N_OV);
++	udelay(1);
++	for (unsigned int lane = 0; lane < 2; lane++) {
++		if (!(pmas & BIT(lane)))
++			continue;
++		atcphy_dp_configure_tx_t8122(atcphy, lane, cfg);
++		atcphy_dp_configure_rxtx_t8122(atcphy, lane, cfg);
++	}
++	core_clear32(atcphy, ACIOPHY_LANE_DP_CFG_BLK_TX_DP_CTRL0, DP_PMA_BYTECLK_RESET);
++	return 0;
++}
++
++static int atcphy_dp_stop_link_t8122(struct apple_atcphy *atcphy)
++{
++	const struct atcphy_mode_configuration *cfg;
++	int ret;
++
++	lockdep_assert_held(&atcphy->lock);
++	if (atcphy->dp_link_rate == ATCPHY_DP_LINK_RATE_IDLE)
++		return 0;
++	cfg = atcphy_get_mode_config(atcphy, atcphy->mode);
++	atcphy->dp_link_rate = ATCPHY_DP_LINK_RATE_PENDING;
++	core_set32(atcphy, ACIOPHY_LANE_DP_CFG_BLK_TX_DP_CTRL0, DP_PMA_BYTECLK_RESET);
++	for (unsigned int lane = 0; lane < 2; lane++) {
++		if (cfg->dp_lane[lane])
++			atcphy_dp_stop_lane_t8122(atcphy, lane);
++	}
++	core_mask32(atcphy, ACIOPHY_LANE_DP_CFG_BLK_TX_DP_CTRL0,
++		    DPTXPHY_PMA_LANE_RESET_N | DPTXPHY_PMA_LANE_RESET_N_OV,
++		    DPTXPHY_PMA_LANE_RESET_N_OV);
++	ret = atcphy_auspll_set_command(atcphy, 0, true);
++	if (ret)
++		return ret;
++	ret = atcphy_auspll_set_command(atcphy, 3, false);
++	if (ret)
++		return ret;
++	ret = atcphy_dp_poll(atcphy, ACIOPHY_DP_PCLK_STAT_T8122, ACIOPHY_AUSPLL_LOCK, 0);
++	if (ret)
++		return ret;
++	core_clear32(atcphy, AUSPLL_CLKOUT_MASTER, AUSPLL_CLKOUT_MASTER_PCLK_DRVR_EN_T8122);
++	atcphy->dp_link_rate = ATCPHY_DP_LINK_RATE_IDLE;
++	return 0;
++}
++
++static int atcphy_dp_set_rate_t8122(struct apple_atcphy *atcphy, enum atcphy_dp_link_rate lr)
++{
++	const struct atcphy_mode_configuration *cfg;
++	u8 pmas;
++	int ret;
+ 
++	guard(mutex)(&atcphy->lock);
++	if (!atcphy_modes[atcphy->mode].enable_dp_aux)
++		return -ENOLINK;
++	cfg = atcphy_get_mode_config(atcphy, atcphy->mode);
++	pmas = cfg->dp_lane[0] | (cfg->dp_lane[1] << 1);
++	if (!pmas)
++		return -EINVAL;
++	if (atcphy->dp_link_rate == lr)
++		return 0;
++	ret = atcphy_dp_stop_link_t8122(atcphy);
++	if (ret)
++		return ret;
++	atcphy->dp_link_rate = ATCPHY_DP_LINK_RATE_PENDING;
++	ret = atcphy_dp_start_link_t8122(atcphy, pmas, lr);
++	if (ret) {
++		atcphy_dp_stop_link_t8122(atcphy);
++		return ret;
++	}
++	atcphy->dp_link_rate = lr;
++	return 0;
++}
++
++static void atcphy_enable_dp_aux_t8122(struct apple_atcphy *atcphy)
++{
++	core_set32(atcphy, AUX_SHM_PWR, AUX_SLEEP_SML_OV | AUX_SLEEP_SML);
++	udelay(1);
++	core_set32(atcphy, AUX_SHM_PWR, AUX_SLEEP_BIG_OV | AUX_SLEEP_BIG);
++	udelay(1);
++	core_mask32(atcphy, AUX_SHM_PWR, AUX_CLAMP_OV | AUX_CLAMP,
++		    AUX_CLAMP_OV);
++	udelay(1);
++	core_clear32(atcphy, AUX_TOP_CTRL, AUX_TOP_PWRDN);
++	udelay(1);
++	atcphy->dp_link_rate = ATCPHY_DP_LINK_RATE_IDLE;
++}
++
++static void atcphy_disable_dp_aux_t8122(struct apple_atcphy *atcphy)
++{
++	core_set32(atcphy, AUX_TOP_CTRL, AUX_TOP_PWRDN);
++	udelay(1);
++	core_set32(atcphy, AUX_SHM_PWR, AUX_CLAMP);
++	udelay(1);
++	core_clear32(atcphy, AUX_SHM_PWR, AUX_SLEEP_BIG);
++	udelay(1);
++	core_clear32(atcphy, AUX_SHM_PWR, AUX_SLEEP_SML);
++	udelay(1);
++}
++
++static void atcphy_enable_dp_aux(struct apple_atcphy *atcphy)
++{
+ 	core_set32(atcphy, ACIOPHY_LANE_DP_CFG_BLK_TX_DP_CTRL0, DPTXPHY_PMA_LANE_RESET_N);
+ 	core_set32(atcphy, ACIOPHY_LANE_DP_CFG_BLK_TX_DP_CTRL0, DPTXPHY_PMA_LANE_RESET_N_OV);
+ 
+@@ -1421,27 +1966,39 @@ static void atcphy_enable_dp_aux(struct apple_atcphy *atcphy)
+ 	mask32(atcphy->regs.lpdptx + LPDPTX_AUX_CFG_BLK_AUX_MARGIN, LPDPTX_AUX_MARGIN_RCAL_TXSWING,
+ 	       FIELD_PREP(LPDPTX_AUX_MARGIN_RCAL_TXSWING, 12));
+ 
+-	atcphy->dp_link_rate = -1;
++	atcphy->dp_link_rate = ATCPHY_DP_LINK_RATE_IDLE;
+ }
+ 
+ static void atcphy_disable_dp_aux(struct apple_atcphy *atcphy)
+ {
+-	/* FIXME */
+-	if (atcphy->hw->gen != ATCPHY_GENERATION_T8122) {
+-		set32(atcphy->regs.lpdptx + LPDPTX_AUX_CONTROL, LPDPTX_AUX_PWN_DOWN);
+-		set32(atcphy->regs.lpdptx + LPDPTX_AUX_CFG_BLK_AUX_CTRL, LPDPTX_BLK_AUX_CTRL_PWRDN);
+-		set32(atcphy->regs.lpdptx + LPDPTX_AUX_CONTROL, LPDPTX_AUX_CLAMP_EN);
+-		clear32(atcphy->regs.lpdptx + LPDPTX_AUX_CONTROL, LPDPTX_SLEEP_B_SML_IN);
+-		udelay(10);
+-		clear32(atcphy->regs.lpdptx + LPDPTX_AUX_CONTROL, LPDPTX_SLEEP_B_BIG_IN);
+-		udelay(10);
+-	}
++	set32(atcphy->regs.lpdptx + LPDPTX_AUX_CONTROL, LPDPTX_AUX_PWN_DOWN);
++	set32(atcphy->regs.lpdptx + LPDPTX_AUX_CFG_BLK_AUX_CTRL, LPDPTX_BLK_AUX_CTRL_PWRDN);
++	set32(atcphy->regs.lpdptx + LPDPTX_AUX_CONTROL, LPDPTX_AUX_CLAMP_EN);
++	clear32(atcphy->regs.lpdptx + LPDPTX_AUX_CONTROL, LPDPTX_SLEEP_B_SML_IN);
++	udelay(10);
++	clear32(atcphy->regs.lpdptx + LPDPTX_AUX_CONTROL, LPDPTX_SLEEP_B_BIG_IN);
++	udelay(10);
++
+ 	core_clear32(atcphy, ACIOPHY_LANE_DP_CFG_BLK_TX_DP_CTRL0, DPTXPHY_PMA_LANE_RESET_N);
+ 	core_clear32(atcphy, ACIOPHY_LANE_DP_CFG_BLK_TX_DP_CTRL0, DPRX_PCLK_ENABLE);
+ 	core_clear32(atcphy, ACIOPHY_LANE_DP_CFG_BLK_TX_DP_CTRL0, DPTX_PCLK1_ENABLE);
+ 	core_clear32(atcphy, ACIOPHY_LANE_DP_CFG_BLK_TX_DP_CTRL0, DPTX_PCLK2_ENABLE);
+ }
+ 
++static void atcphy_dp_enable_aux(struct apple_atcphy *atcphy)
++{
++	if (atcphy->hw->dp)
++		atcphy->hw->dp->enable_aux(atcphy);
++	else
++		dev_warn_once(atcphy->dev, "DisplayPort AUX initialization is not implemented\n");
++}
++
++static void atcphy_dp_disable_aux(struct apple_atcphy *atcphy)
++{
++	if (atcphy->hw->dp)
++		atcphy->hw->dp->disable_aux(atcphy);
++}
++
+ static int atcphy_dp_configure_lane(struct apple_atcphy *atcphy, enum atcphy_lane lane,
+ 				    const struct atcphy_dp_link_rate_configuration *cfg)
+ {
+@@ -1450,20 +2007,11 @@ static int atcphy_dp_configure_lane(struct apple_atcphy *atcphy, enum atcphy_lan
+ 
+ 	lockdep_assert_held(&atcphy->lock);
+ 
+-	switch (lane) {
+-	case APPLE_ATCPHY_LANE_0:
+-		tx_shm = atcphy->regs.core + LN0_AUSPMA_TX_SHM;
+-		rx_shm = atcphy->regs.core + LN0_AUSPMA_RX_SHM;
+-		rx_top = atcphy->regs.core + LN0_AUSPMA_RX_TOP;
+-		break;
+-	case APPLE_ATCPHY_LANE_1:
+-		tx_shm = atcphy->regs.core + LN1_AUSPMA_TX_SHM;
+-		rx_shm = atcphy->regs.core + LN1_AUSPMA_RX_SHM;
+-		rx_top = atcphy->regs.core + LN1_AUSPMA_RX_TOP;
+-		break;
+-	default:
++	if ((unsigned int)lane > APPLE_ATCPHY_LANE_1)
+ 		return -EINVAL;
+-	}
++	tx_shm = atcphy_lane_reg(atcphy, lane, LN0_AUSPMA_TX_SHM);
++	rx_shm = atcphy_lane_reg(atcphy, lane, LN0_AUSPMA_RX_SHM);
++	rx_top = atcphy_lane_reg(atcphy, lane, LN0_AUSPMA_RX_TOP);
+ 
+ 	set32(tx_shm + LN_AUSPMA_TX_SHM_TXA_LDOCLK, LN_LDOCLK_EN_SML);
+ 	set32(tx_shm + LN_AUSPMA_TX_SHM_TXA_LDOCLK, LN_LDOCLK_EN_SML_OV);
+@@ -1801,7 +2349,7 @@ static int atcphy_power_off(struct apple_atcphy *atcphy)
+ 	u32 reg;
+ 	int ret;
+ 
+-	atcphy_disable_dp_aux(atcphy);
++	atcphy_dp_disable_aux(atcphy);
+ 
+ 	/* Enable all reset lines */
+ 	core_clear32(atcphy, ATCPHY_POWER_CTRL, ATCPHY_POWER_PHY_RESET_N);
+@@ -1924,10 +2472,8 @@ static void atcphy_configure_post_tunable_t8103(struct apple_atcphy *atcphy, enu
+ 	udelay(10);
+ }
+ 
+-static void atcphy_configure_post_tunable_t8122(struct apple_atcphy *atcphy, enum atcphy_mode mode)
++static void atcphy_power_on_common_t8122(struct apple_atcphy *atcphy)
+ {
+-	if (atcphy_modes[mode].pipehandler_state != ATCPHY_PIPEHANDLER_STATE_USB3)
+-		return;
+ 	core_set32(atcphy, ACIOPHY_CFG0, ACIOPHY_CFG0_COMMON_SMALL);
+ 	udelay(10);
+ 	core_set32(atcphy, ACIOPHY_CFG0, ACIOPHY_CFG0_COMMON_SMALL_OV);
+@@ -1944,12 +2490,24 @@ static void atcphy_configure_post_tunable_t8122(struct apple_atcphy *atcphy, enu
+ 	udelay(10);
+ }
+ 
++static void atcphy_configure_post_tunable_t8122(struct apple_atcphy *atcphy, enum atcphy_mode mode)
++{
++	if (atcphy_modes[mode].pipehandler_state == ATCPHY_PIPEHANDLER_STATE_USB3 ||
++	    (atcphy->hw->dp && atcphy_modes[mode].enable_dp_aux))
++		atcphy_power_on_common_t8122(atcphy);
++}
++
+ static int atcphy_configure(struct apple_atcphy *atcphy, enum atcphy_mode mode)
+ {
+ 	int ret = 0;
+ 	u32 reg;
+ 
+ 	lockdep_assert_held(&atcphy->lock);
++	if (atcphy->hw->dp && atcphy->hw->dp->stop) {
++		ret = atcphy->hw->dp->stop(atcphy);
++		if (ret)
++			return ret;
++	}
+ 
+ 	if (mode == APPLE_ATCPHY_MODE_OFF) {
+ 		ret = atcphy_power_off(atcphy);
+@@ -1966,7 +2524,7 @@ static int atcphy_configure(struct apple_atcphy *atcphy, enum atcphy_mode mode)
+ 
+ 	/* Setup AUX channel if DP altmode is requested */
+ 	if (atcphy_modes[mode].enable_dp_aux)
+-		atcphy_enable_dp_aux(atcphy);
++		atcphy_dp_enable_aux(atcphy);
+ 
+ 	/* Enable clocks and configure lanes */
+ 	if (atcphy->hw->gen == ATCPHY_GENERATION_T8103) {
+@@ -2116,6 +2674,10 @@ static int atcphy_dpphy_configure(struct phy *phy, union phy_configure_opts *opt
+ 		return -EINVAL;
+ 
+ 	if (opts->set_rate) {
++		if (!atcphy->hw->dp) {
++			dev_warn(atcphy->dev, "DisplayPort lane setup is not implemented\n");
++			return -EOPNOTSUPP;
++		}
+ 		switch (opts->link_rate) {
+ 		case 1620:
+ 			link_rate = ATCPHY_DP_LINK_RATE_RBR;
+@@ -2130,12 +2692,18 @@ static int atcphy_dpphy_configure(struct phy *phy, union phy_configure_opts *opt
+ 			link_rate = ATCPHY_DP_LINK_RATE_HBR3;
+ 			break;
+ 		case 0:
++			if (atcphy->hw->dp->stop) {
++				guard(mutex)(&atcphy->lock);
++				return atcphy->hw->dp->stop(atcphy);
++			}
+ 			return 0;
+ 		default:
+ 			dev_err(atcphy->dev, "Unsupported link rate: %d\n", opts->link_rate);
+ 			return -EINVAL;
+ 		}
+ 
++		if (atcphy->hw->dp->set_rate)
++			return atcphy->hw->dp->set_rate(atcphy, link_rate);
+ 		return atcphy_dp_configure(atcphy, link_rate);
+ 	}
+ 
+@@ -2258,20 +2826,32 @@ static int atcphy_probe_rcdev(struct apple_atcphy *atcphy)
+ static int atcphy_sw_set(struct typec_switch_dev *sw, enum typec_orientation orientation)
+ {
+ 	struct apple_atcphy *atcphy = typec_switch_get_drvdata(sw);
++	bool swap_lanes;
++	int ret;
+ 
+ 	guard(mutex)(&atcphy->lock);
+ 
+ 	switch (orientation) {
+ 	case TYPEC_ORIENTATION_NONE:
+-		break;
++		return 0;
+ 	case TYPEC_ORIENTATION_NORMAL:
+-		atcphy->swap_lanes = false;
++		swap_lanes = false;
+ 		break;
+ 	case TYPEC_ORIENTATION_REVERSE:
+-		atcphy->swap_lanes = true;
++		swap_lanes = true;
+ 		break;
++	default:
++		return -EINVAL;
+ 	}
+ 
++	/* Cleanup needs the old lane configuration until shutdown succeeds. */
++	if (swap_lanes != atcphy->swap_lanes && atcphy->hw->dp && atcphy->hw->dp->stop) {
++		ret = atcphy->hw->dp->stop(atcphy);
++		if (ret)
++			return ret;
++	}
++	atcphy->swap_lanes = swap_lanes;
++
+ 	return 0;
+ }
+ 
+@@ -2300,6 +2880,7 @@ static int atcphy_mux_set(struct typec_mux_dev *mux, struct typec_mux_state *sta
+ {
+ 	struct apple_atcphy *atcphy = typec_mux_get_drvdata(mux);
+ 	enum atcphy_mode target_mode;
++	int ret;
+ 
+ 	guard(mutex)(&atcphy->lock);
+ 
+@@ -2356,12 +2937,19 @@ static int atcphy_mux_set(struct typec_mux_dev *mux, struct typec_mux_state *sta
+ 	if (atcphy->mode == target_mode)
+ 		return 0;
+ 
+-	/*
+-	 * If the pipehandler is still/already up here there's a bug somewhere so make sure to
+-	 * complain loudly. We can still try to switch modes and hope for the best though,
+-	 * in the worst case the hardware will fall back to USB2-only.
+-	 */
+-	WARN_ON_ONCE(atcphy->pipehandler_up);
++	/* A DP alt-mode mux switch can race DWC3's phy_power_off on hotplug */
++	if (atcphy->pipehandler_up &&
++	    atcphy_modes[target_mode].pipehandler_state == ATCPHY_PIPEHANDLER_STATE_DUMMY) {
++		ret = atcphy_configure_pipehandler_dummy(atcphy);
++		if (ret)
++			dev_warn(atcphy->dev,
++				 "Failed to clear pipehandler before mode switch: %d\n", ret);
++		else
++			atcphy->pipehandler_up = false;
++	}
++
++	WARN_ON_ONCE(atcphy->pipehandler_up &&
++		     atcphy_modes[target_mode].pipehandler_state == ATCPHY_PIPEHANDLER_STATE_DUMMY);
+ 	return atcphy_configure(atcphy, target_mode);
+ }
+ 
+@@ -2512,12 +3100,26 @@ static int atcphy_probe(struct platform_device *pdev)
+ 		return ret;
+ 
+ 	atcphy->mode = APPLE_ATCPHY_MODE_OFF;
++	atcphy->dp_link_rate = ATCPHY_DP_LINK_RATE_IDLE;
+ 	atcphy->pipehandler_up = false;
+ 
+ 	return atcphy_probe_finalize(atcphy);
+ }
+ 
++static const struct atcphy_dp_ops atcphy_dp_ops_default = {
++	.enable_aux = atcphy_enable_dp_aux,
++	.disable_aux = atcphy_disable_dp_aux,
++};
++
++static const struct atcphy_dp_ops atcphy_dp_ops_t8122 = {
++	.enable_aux = atcphy_enable_dp_aux_t8122,
++	.disable_aux = atcphy_disable_dp_aux_t8122,
++	.set_rate = atcphy_dp_set_rate_t8122,
++	.stop = atcphy_dp_stop_link_t8122,
++};
++
+ static const struct atcphy_hw atcphy_hw_t8103 = {
++	.dp = &atcphy_dp_ops_default,
+ 	.gen = ATCPHY_GENERATION_T8103,
+ 	.aciophy_lane_mode = ACIOPHY_LANE_MODE_T8103,
+ 	.aciophy_crossbar = ACIOPHY_CROSSBAR_T8103,
+@@ -2525,6 +3127,7 @@ static const struct atcphy_hw atcphy_hw_t8103 = {
+ };
+ 
+ static const struct atcphy_hw atcphy_hw_t8122 = {
++	.dp = &atcphy_dp_ops_t8122,
+ 	.gen = ATCPHY_GENERATION_T8122,
+ 	.aciophy_lane_mode = ACIOPHY_LANE_MODE_T8122,
+ 	.aciophy_crossbar = ACIOPHY_CROSSBAR_T8122,
+diff --git a/drivers/soc/apple/mailbox.c b/drivers/soc/apple/mailbox.c
+index 330015ee..f5dc2ce8 100644
+--- a/drivers/soc/apple/mailbox.c
++++ b/drivers/soc/apple/mailbox.c
+@@ -83,6 +83,7 @@
+ struct apple_mbox_hw {
+ 	unsigned int control_full;
+ 	unsigned int control_empty;
++	unsigned int control_enable;
+ 
+ 	unsigned int a2i_control;
+ 	unsigned int a2i_send0;
+@@ -243,6 +244,7 @@ EXPORT_SYMBOL(apple_mbox_poll);
+ int apple_mbox_start(struct apple_mbox *mbox)
+ {
+ 	int ret;
++	u32 ctrl;
+ 
+ 	if (mbox->active)
+ 		return 0;
+@@ -251,6 +253,12 @@ int apple_mbox_start(struct apple_mbox *mbox)
+ 	if (ret)
+ 		return ret;
+ 
++	/* ASCWrap v6 requires an explicit I2A FIFO enable write at handoff. */
++	if (mbox->hw->control_enable) {
++		ctrl = readl_relaxed(mbox->regs + mbox->hw->i2a_control);
++		writel_relaxed(ctrl | mbox->hw->control_enable,
++			       mbox->regs + mbox->hw->i2a_control);
++	}
+ 	/*
+ 	 * Only some variants of this mailbox HW provide interrupt control
+ 	 * at the mailbox level. We therefore need to handle enabling/disabling
+@@ -422,6 +430,22 @@ static const struct apple_mbox_hw apple_mbox_asc_hw = {
+ 	.has_irq_controls = false,
+ };
+ 
++static const struct apple_mbox_hw apple_mbox_t6030_asc_hw = {
++	.control_full = APPLE_ASC_MBOX_CONTROL_FULL,
++	.control_empty = APPLE_ASC_MBOX_CONTROL_EMPTY,
++	.control_enable = BIT(0),
++
++	.a2i_control = APPLE_ASC_MBOX_A2I_CONTROL,
++	.a2i_send0 = APPLE_ASC_MBOX_A2I_SEND0,
++	.a2i_send1 = APPLE_ASC_MBOX_A2I_SEND1,
++
++	.i2a_control = APPLE_ASC_MBOX_I2A_CONTROL,
++	.i2a_recv0 = APPLE_ASC_MBOX_I2A_RECV0,
++	.i2a_recv1 = APPLE_ASC_MBOX_I2A_RECV1,
++
++	.has_irq_controls = false,
++};
++
+ static const struct apple_mbox_hw apple_mbox_m3_hw = {
+ 	.control_full = APPLE_M3_MBOX_CONTROL_FULL,
+ 	.control_empty = APPLE_M3_MBOX_CONTROL_EMPTY,
+@@ -442,6 +466,7 @@ static const struct apple_mbox_hw apple_mbox_m3_hw = {
+ };
+ 
+ static const struct of_device_id apple_mbox_of_match[] = {
++	{ .compatible = "apple,t6030-asc-mailbox", .data = &apple_mbox_t6030_asc_hw },
+ 	{ .compatible = "apple,asc-mailbox-v4", .data = &apple_mbox_asc_hw },
+ 	{ .compatible = "apple,t8015-asc-mailbox", .data = &apple_mbox_t8015_hw },
+ 	{ .compatible = "apple,m3-mailbox-v2", .data = &apple_mbox_m3_hw },
+diff --git a/drivers/soc/apple/rtkit-internal.h b/drivers/soc/apple/rtkit-internal.h
+index c82065a8..3d79ac30 100644
+--- a/drivers/soc/apple/rtkit-internal.h
++++ b/drivers/soc/apple/rtkit-internal.h
+@@ -39,12 +39,15 @@ struct apple_rtkit {
+ 	unsigned int iop_power_state;
+ 	unsigned int ap_power_state;
+ 	bool crashed;
++	bool sync_syslog_ack;
+ 
+ 	DECLARE_BITMAP(endpoints, APPLE_RTKIT_MAX_ENDPOINTS);
+ 
+ 	struct apple_rtkit_shmem ioreport_buffer;
+ 	struct apple_rtkit_shmem crashlog_buffer;
+ 	struct apple_rtkit_shmem oslog_buffer;
++	struct apple_rtkit_shmem kdebug_buffer0;
++	struct apple_rtkit_shmem kdebug_buffer1;
+ 
+ 	struct apple_rtkit_shmem syslog_buffer;
+ 	char *syslog_msg_buffer;
+diff --git a/drivers/soc/apple/rtkit.c b/drivers/soc/apple/rtkit.c
+index a863ae16..d0a8cbba 100644
+--- a/drivers/soc/apple/rtkit.c
++++ b/drivers/soc/apple/rtkit.c
+@@ -6,6 +6,9 @@
+ 
+ #include "rtkit-internal.h"
+ 
++#include <linux/jiffies.h>
++#include <linux/of.h>
++
+ enum {
+ 	APPLE_RTKIT_PWR_STATE_OFF = 0x00, /* power off, cannot be restarted */
+ 	APPLE_RTKIT_PWR_STATE_SLEEP = 0x01, /* sleeping, can be restarted */
+@@ -71,6 +74,18 @@ enum {
+ #define APPLE_RTKIT_OSLOG_SIZE GENMASK_ULL(55, 36)
+ #define APPLE_RTKIT_OSLOG_IOVA GENMASK_ULL(35, 0)
+ 
++#define APPLE_RTKIT_KDEBUG_TYPE GENMASK_ULL(55, 48)
++#define APPLE_RTKIT_KDEBUG_DATA GENMASK_ULL(47, 0)
++
++enum {
++	APPLE_RTKIT_KDEBUG_GET_BUFFER = 1,
++	APPLE_RTKIT_KDEBUG_SET_BUFFER0 = 1,
++	APPLE_RTKIT_KDEBUG_SET_BUFFER1 = 2,
++	APPLE_RTKIT_KDEBUG_PREALLOC_BUFFER0 = 2,
++	APPLE_RTKIT_KDEBUG_PREALLOC_BUFFER1 = 3,
++	APPLE_RTKIT_KDEBUG_START = 8,
++};
++
+ #define APPLE_RTKIT_MIN_SUPPORTED_VERSION 11
+ #define APPLE_RTKIT_MAX_SUPPORTED_VERSION 12
+ 
+@@ -153,7 +168,7 @@ static void apple_rtkit_management_rx_hello(struct apple_rtkit *rtk, u64 msg)
+ 
+ static void apple_rtkit_management_rx_epmap(struct apple_rtkit *rtk, u64 msg)
+ {
+-	int i, ep;
++	int i, ep, ret;
+ 	u64 reply;
+ 	unsigned long bitmap = FIELD_GET(APPLE_RTKIT_MGMT_EPMAP_BITMAP, msg);
+ 	u32 base = FIELD_GET(APPLE_RTKIT_MGMT_EPMAP_BASE, msg);
+@@ -193,7 +208,18 @@ static void apple_rtkit_management_rx_epmap(struct apple_rtkit *rtk, u64 msg)
+ 		case APPLE_RTKIT_EP_OSLOG:
+ 			dev_dbg(rtk->dev,
+ 				"RTKit: Starting system endpoint 0x%02x\n", ep);
+-			apple_rtkit_start_ep(rtk, ep);
++			ret = apple_rtkit_start_ep(rtk, ep);
++			if (ret)
++				goto error;
++			if (ep == APPLE_RTKIT_EP_DEBUG) {
++				ret = apple_rtkit_send_message(
++					rtk, ep,
++					FIELD_PREP(APPLE_RTKIT_KDEBUG_TYPE,
++						   APPLE_RTKIT_KDEBUG_START),
++					NULL, false);
++				if (ret)
++					goto error;
++			}
+ 			break;
+ 
+ 		default:
+@@ -205,6 +231,11 @@ static void apple_rtkit_management_rx_epmap(struct apple_rtkit *rtk, u64 msg)
+ 
+ 	rtk->boot_result = 0;
+ 	complete_all(&rtk->epmap_completion);
++	return;
++
++error:
++	rtk->boot_result = ret;
++	complete_all(&rtk->epmap_completion);
+ }
+ 
+ static void apple_rtkit_management_rx_iop_pwr_ack(struct apple_rtkit *rtk,
+@@ -348,6 +379,98 @@ static void apple_rtkit_free_buffer(struct apple_rtkit *rtk,
+ 	bfr->is_mapped = false;
+ }
+ 
++static int apple_rtkit_kdebug_alloc_buffer(struct apple_rtkit *rtk,
++					   struct apple_rtkit_shmem *buffer,
++					   size_t size)
++{
++	int err;
++
++	/* Firmware may still be using buffers from an earlier request. */
++	if (buffer->size)
++		return buffer->size == size ? 0 : -EINVAL;
++
++	buffer->size = size;
++	buffer->iova = 0;
++	buffer->buffer = NULL;
++	buffer->iomem = NULL;
++	buffer->is_mapped = false;
++
++	if (rtk->ops->shmem_setup) {
++		err = rtk->ops->shmem_setup(rtk->cookie, buffer);
++		if (err)
++			goto error;
++	} else {
++		buffer->buffer = dma_alloc_coherent(rtk->dev, buffer->size,
++						    &buffer->iova, GFP_KERNEL);
++		if (!buffer->buffer) {
++			err = -ENOMEM;
++			goto error;
++		}
++	}
++
++	return 0;
++
++error:
++	buffer->size = 0;
++	return err;
++}
++
++static void apple_rtkit_kdebug_rx(struct apple_rtkit *rtk, u64 msg)
++{
++	u8 type = FIELD_GET(APPLE_RTKIT_KDEBUG_TYPE, msg);
++	u64 count, reply;
++	size_t size;
++	int err;
++
++	switch (type) {
++	case APPLE_RTKIT_KDEBUG_GET_BUFFER:
++		count = FIELD_GET(APPLE_RTKIT_KDEBUG_DATA, msg);
++		if (!count || count > (SIZE_MAX - 0x3fff) / 0x20) {
++			err = -EINVAL;
++			goto error;
++		}
++
++		size = ALIGN((size_t)count * 0x20, 0x4000);
++		err = apple_rtkit_kdebug_alloc_buffer(rtk,
++						       &rtk->kdebug_buffer0, size);
++		if (err)
++			goto error;
++
++		err = apple_rtkit_kdebug_alloc_buffer(rtk,
++						       &rtk->kdebug_buffer1, 0x2000);
++		if (err)
++			goto error;
++
++		reply = FIELD_PREP(APPLE_RTKIT_KDEBUG_TYPE,
++				   APPLE_RTKIT_KDEBUG_SET_BUFFER0) |
++			FIELD_PREP(APPLE_RTKIT_KDEBUG_DATA,
++				   rtk->kdebug_buffer0.iova);
++		err = apple_rtkit_send_message(rtk, APPLE_RTKIT_EP_DEBUG, reply,
++					       NULL, false);
++		if (err)
++			goto error;
++
++		reply = FIELD_PREP(APPLE_RTKIT_KDEBUG_TYPE,
++				   APPLE_RTKIT_KDEBUG_SET_BUFFER1) |
++			FIELD_PREP(APPLE_RTKIT_KDEBUG_DATA,
++				   rtk->kdebug_buffer1.iova);
++		err = apple_rtkit_send_message(rtk, APPLE_RTKIT_EP_DEBUG, reply,
++					       NULL, false);
++		if (err)
++			goto error;
++		break;
++	case APPLE_RTKIT_KDEBUG_PREALLOC_BUFFER0:
++	case APPLE_RTKIT_KDEBUG_PREALLOC_BUFFER1:
++		break;
++	default:
++		dev_warn_ratelimited(rtk->dev, "RTKit: Unknown kdebug message: %llx\n", msg);
++	}
++	return;
++
++error:
++	dev_err_ratelimited(rtk->dev, "RTKit: kdebug buffer request failed: %d\n", err);
++}
++
+ static void apple_rtkit_memcpy(struct apple_rtkit *rtk, void *dst,
+ 			       struct apple_rtkit_shmem *bfr, size_t offset,
+ 			       size_t len)
+@@ -539,6 +662,9 @@ static void apple_rtkit_rx_work(struct work_struct *work)
+ 	case APPLE_RTKIT_EP_SYSLOG:
+ 		apple_rtkit_syslog_rx(rtk, rtk_work->msg);
+ 		break;
++	case APPLE_RTKIT_EP_DEBUG:
++		apple_rtkit_kdebug_rx(rtk, rtk_work->msg);
++		break;
+ 	case APPLE_RTKIT_EP_IOREPORT:
+ 		apple_rtkit_ioreport_rx(rtk, rtk_work->msg);
+ 		break;
+@@ -578,6 +704,19 @@ static void apple_rtkit_rx(struct apple_mbox *mbox, struct apple_mbox_msg msg,
+ 	 */
+ 	dma_rmb();
+ 
++	if (rtk->sync_syslog_ack && ep == APPLE_RTKIT_EP_SYSLOG &&
++	    FIELD_GET(APPLE_RTKIT_SYSLOG_TYPE, msg.msg0) ==
++		APPLE_RTKIT_SYSLOG_LOG) {
++		apple_rtkit_send_message(rtk, ep, msg.msg0, NULL, true);
++		return;
++	}
++	if (rtk->sync_syslog_ack && ep == APPLE_RTKIT_EP_IOREPORT &&
++	    (FIELD_GET(APPLE_RTKIT_SYSLOG_TYPE, msg.msg0) == 0x8 ||
++	     FIELD_GET(APPLE_RTKIT_SYSLOG_TYPE, msg.msg0) == 0xc)) {
++		apple_rtkit_send_message(rtk, ep, msg.msg0, NULL, true);
++		return;
++	}
++
+ 	if (!test_bit(ep, rtk->endpoints))
+ 		dev_warn(rtk->dev,
+ 			 "RTKit: Message to undiscovered endpoint 0x%02x\n",
+@@ -655,9 +794,7 @@ int apple_rtkit_start_ep(struct apple_rtkit *rtk, u8 endpoint)
+ 
+ 	msg = FIELD_PREP(APPLE_RTKIT_MGMT_STARTEP_EP, endpoint);
+ 	msg |= APPLE_RTKIT_MGMT_STARTEP_FLAG;
+-	apple_rtkit_management_send(rtk, APPLE_RTKIT_MGMT_STARTEP, msg);
+-
+-	return 0;
++	return apple_rtkit_management_send(rtk, APPLE_RTKIT_MGMT_STARTEP, msg);
+ }
+ EXPORT_SYMBOL_GPL(apple_rtkit_start_ep);
+ 
+@@ -678,6 +815,8 @@ struct apple_rtkit *apple_rtkit_init(struct device *dev, void *cookie,
+ 	rtk->dev = dev;
+ 	rtk->cookie = cookie;
+ 	rtk->ops = ops;
++	rtk->sync_syslog_ack =
++		of_property_read_bool(dev->of_node, "apple,sync-syslog-ack");
+ 
+ 	init_completion(&rtk->epmap_completion);
+ 	init_completion(&rtk->iop_pwr_ack_completion);
+@@ -720,18 +859,27 @@ struct apple_rtkit *apple_rtkit_init(struct device *dev, void *cookie,
+ }
+ EXPORT_SYMBOL_GPL(apple_rtkit_init);
+ 
+-static int apple_rtkit_wait_for_completion(struct completion *c)
++static int apple_rtkit_wait_for_completion(struct apple_rtkit *rtk,
++					   struct completion *c)
+ {
++	unsigned long timeout = jiffies + msecs_to_jiffies(1000);
+ 	long t;
++	int ret;
+ 
+-	t = wait_for_completion_interruptible_timeout(c,
+-						      msecs_to_jiffies(1000));
+-	if (t < 0)
+-		return t;
+-	else if (t == 0)
+-		return -ETIME;
+-	else
+-		return 0;
++	do {
++		ret = apple_rtkit_poll(rtk);
++		if (ret < 0)
++			return ret;
++
++		t = wait_for_completion_interruptible_timeout(c,
++							      msecs_to_jiffies(10));
++		if (t < 0)
++			return t;
++		if (t > 0)
++			return 0;
++	} while (time_before(jiffies, timeout));
++
++	return -ETIME;
+ }
+ 
+ int apple_rtkit_reinit(struct apple_rtkit *rtk)
+@@ -744,6 +892,8 @@ int apple_rtkit_reinit(struct apple_rtkit *rtk)
+ 	apple_rtkit_free_buffer(rtk, &rtk->crashlog_buffer);
+ 	apple_rtkit_free_buffer(rtk, &rtk->oslog_buffer);
+ 	apple_rtkit_free_buffer(rtk, &rtk->syslog_buffer);
++	apple_rtkit_free_buffer(rtk, &rtk->kdebug_buffer0);
++	apple_rtkit_free_buffer(rtk, &rtk->kdebug_buffer1);
+ 
+ 	kfree(rtk->syslog_msg_buffer);
+ 
+@@ -780,7 +930,7 @@ static int apple_rtkit_set_ap_power_state(struct apple_rtkit *rtk,
+ 	if (ret)
+ 		return ret;
+ 
+-	ret = apple_rtkit_wait_for_completion(&rtk->ap_pwr_ack_completion);
++	ret = apple_rtkit_wait_for_completion(rtk, &rtk->ap_pwr_ack_completion);
+ 	if (ret)
+ 		return ret;
+ 
+@@ -803,7 +953,7 @@ static int apple_rtkit_set_iop_power_state(struct apple_rtkit *rtk,
+ 	if (ret)
+ 		return ret;
+ 
+-	ret = apple_rtkit_wait_for_completion(&rtk->iop_pwr_ack_completion);
++	ret = apple_rtkit_wait_for_completion(rtk, &rtk->iop_pwr_ack_completion);
+ 	if (ret)
+ 		return ret;
+ 
+@@ -822,14 +972,14 @@ int apple_rtkit_boot(struct apple_rtkit *rtk)
+ 		return -EINVAL;
+ 
+ 	dev_dbg(rtk->dev, "RTKit: waiting for boot to finish\n");
+-	ret = apple_rtkit_wait_for_completion(&rtk->epmap_completion);
++	ret = apple_rtkit_wait_for_completion(rtk, &rtk->epmap_completion);
+ 	if (ret)
+ 		return ret;
+ 	if (rtk->boot_result)
+ 		return rtk->boot_result;
+ 
+ 	dev_dbg(rtk->dev, "RTKit: waiting for IOP power state ACK\n");
+-	ret = apple_rtkit_wait_for_completion(&rtk->iop_pwr_ack_completion);
++	ret = apple_rtkit_wait_for_completion(rtk, &rtk->iop_pwr_ack_completion);
+ 	if (ret)
+ 		return ret;
+ 
+@@ -948,6 +1098,8 @@ void apple_rtkit_free(struct apple_rtkit *rtk)
+ 	apple_rtkit_free_buffer(rtk, &rtk->crashlog_buffer);
+ 	apple_rtkit_free_buffer(rtk, &rtk->oslog_buffer);
+ 	apple_rtkit_free_buffer(rtk, &rtk->syslog_buffer);
++	apple_rtkit_free_buffer(rtk, &rtk->kdebug_buffer0);
++	apple_rtkit_free_buffer(rtk, &rtk->kdebug_buffer1);
+ 
+ 	kfree(rtk->syslog_msg_buffer);
+ 	kfree(rtk);
+diff --git a/drivers/usb/typec/Makefile b/drivers/usb/typec/Makefile
+index 8a6a1c66..eebe658d 100644
+--- a/drivers/usb/typec/Makefile
++++ b/drivers/usb/typec/Makefile
+@@ -5,7 +5,7 @@ typec-$(CONFIG_ACPI)		+= port-mapper.o
+ obj-$(CONFIG_TYPEC)		+= altmodes/
+ obj-$(CONFIG_TYPEC_TCPM)	+= tcpm/
+ obj-$(CONFIG_TYPEC_UCSI)	+= ucsi/
+-obj-$(CONFIG_TYPEC_TPS6598X)	+= tipd/
++obj-$(CONFIG_TYPEC_TPS6598X_CORE)	+= tipd/
+ obj-$(CONFIG_TYPEC_ANX7411)	+= anx7411.o
+ obj-$(CONFIG_TYPEC_HD3SS3220)	+= hd3ss3220.o
+ obj-$(CONFIG_TYPEC_STUSB160X) 	+= stusb160x.o
+diff --git a/drivers/usb/typec/tipd/Kconfig b/drivers/usb/typec/tipd/Kconfig
+index 8177f860..bd9cff63 100644
+--- a/drivers/usb/typec/tipd/Kconfig
++++ b/drivers/usb/typec/tipd/Kconfig
+@@ -6,6 +6,7 @@ config TYPEC_TPS6598X_CORE
+ config TYPEC_TPS6598X
+ 	tristate "TI TPS6598x USB Power Delivery controller driver"
+ 	depends on I2C
++	depends on DRM || !DRM
+ 	select REGMAP_I2C
+ 	select TYPEC_TPS6598X_CORE
+ 	help
+@@ -18,6 +19,7 @@ config TYPEC_TPS6598X
+ config TYPEC_SN201202X
+ 	tristate "TI SN201202x USB Power Delivery controller support"
+ 	depends on SPMI
++	depends on DRM || !DRM
+ 	select TYPEC_TPS6598X_CORE
+ 	help
+ 	  Say Y here to enable support for SN201202x, a TPS6598x variant
+diff --git a/drivers/usb/typec/tipd/core.c b/drivers/usb/typec/tipd/core.c
+index 0687cc28..09a3c3e8 100644
+--- a/drivers/usb/typec/tipd/core.c
++++ b/drivers/usb/typec/tipd/core.c
+@@ -6,6 +6,8 @@
+  * Author: Heikki Krogerus <heikki.krogerus@linux.intel.com>
+  */
+ 
++#include <drm/drm_connector.h>
++
+ #include <linux/i2c.h>
+ #include <linux/acpi.h>
+ #include <linux/gpio/consumer.h>
+@@ -676,6 +678,7 @@ static void cd321x_update_work(struct work_struct *work)
+ 
+ 	st = cd321x->update_status;
+ 	cd321x->update_status.status_changed = 0;
++	cd321x->update_status.data_status_changed = 0;
+ 
+ 	bool old_connected = !!tps->partner;
+ 	bool new_connected = st.status & TPS_STATUS_PLUG_PRESENT;
+@@ -683,6 +686,8 @@ static void cd321x_update_work(struct work_struct *work)
+ 
+ 	bool usb_connection = st.data_status &
+ 			      (TPS_DATA_STATUS_USB2_CONNECTION | TPS_DATA_STATUS_USB3_CONNECTION);
++	bool dp_hpd = st.data_status & CD321X_DATA_STATUS_HPD_LEVEL;
++	bool dp_hpd_changed = st.data_status_changed & CD321X_DATA_STATUS_HPD_LEVEL;
+ 
+ 	enum usb_role old_role = usb_role_switch_get_role(tps->role_sw);
+ 	enum usb_role new_role = USB_ROLE_NONE;
+@@ -712,6 +717,11 @@ static void cd321x_update_work(struct work_struct *work)
+ 	if (old_role != USB_ROLE_NONE && (new_role != old_role || was_disconnected))
+ 		usb_role_switch_set_role(tps->role_sw, USB_ROLE_NONE);
+ 
++	if (IS_ENABLED(CONFIG_DRM) && cd321x->connector_fwnode &&
++	    (!dp_hpd || dp_hpd_changed))
++		drm_connector_oob_hotplug_event(cd321x->connector_fwnode,
++					connector_status_disconnected);
++
+ 	/* Process partner disconnection or change */
+ 	if (!new_connected || partner_changed) {
+ 		if (!IS_ERR(tps->partner))
+@@ -769,12 +779,18 @@ static void cd321x_update_work(struct work_struct *work)
+ 	/* Launch the USB role switch */
+ 	usb_role_switch_set_role(tps->role_sw, new_role);
+ 
++	if (IS_ENABLED(CONFIG_DRM) && cd321x->connector_fwnode && dp_hpd)
++		drm_connector_oob_hotplug_event(cd321x->connector_fwnode,
++					connector_status_connected);
++
+ 	power_supply_changed(tps->psy);
+ }
+ 
+ static void cd321x_queue_status(struct cd321x *cd321x)
+ {
+ 	cd321x->update_status.status_changed |= cd321x->update_status.status ^ cd321x->tps.status;
++	cd321x->update_status.data_status_changed |=
++		cd321x->update_status.data_status ^ cd321x->tps.data_status;
+ 
+ 	cd321x->update_status.status = cd321x->tps.status;
+ 	cd321x->update_status.pwr_status = cd321x->tps.pwr_status;
+@@ -1203,6 +1219,7 @@ static int
+ cd321x_register_port(struct tps6598x *tps, struct fwnode_handle *fwnode)
+ {
+ 	struct cd321x *cd321x = container_of(tps, struct cd321x, tps);
++	struct fwnode_handle *connector_fwnode = NULL;
+ 	int ret;
+ 
+ 	INIT_DELAYED_WORK(&cd321x->update_work, cd321x_update_work);
+@@ -1221,6 +1238,11 @@ cd321x_register_port(struct tps6598x *tps, struct fwnode_handle *fwnode)
+ 		goto err_unregister_altmodes;
+ 	}
+ 
++	if (fwnode_property_present(fwnode, "displayport"))
++		connector_fwnode = fwnode_find_reference(fwnode, "displayport", 0);
++	if (!IS_ERR_OR_NULL(connector_fwnode))
++		cd321x->connector_fwnode = connector_fwnode;
++
+ 	cd321x->tbt_switch = fwnode_typec_thunderbolt_switch_get(fwnode);
+ 	if (IS_ERR(cd321x->tbt_switch)) {
+ 		ret = PTR_ERR(cd321x->tbt_switch);
+@@ -1235,6 +1257,8 @@ cd321x_register_port(struct tps6598x *tps, struct fwnode_handle *fwnode)
+ 	return 0;
+ 
+ err_unregister_mux:
++	fwnode_handle_put(cd321x->connector_fwnode);
++	cd321x->connector_fwnode = NULL;
+ 	typec_mux_put(cd321x->mux);
+ 	cd321x->mux = NULL;
+ err_unregister_altmodes:
+@@ -1258,6 +1282,8 @@ cd321x_unregister_port(struct tps6598x *tps)
+ {
+ 	struct cd321x *cd321x = container_of(tps, struct cd321x, tps);
+ 
++	fwnode_handle_put(cd321x->connector_fwnode);
++	cd321x->connector_fwnode = NULL;
+ 	typec_thunderbolt_switch_put(cd321x->tbt_switch);
+ 	cd321x->tbt_switch = NULL;
+ 	typec_mux_put(cd321x->mux);
+@@ -1698,7 +1724,9 @@ int tipd_init(struct tps6598x *tps)
+ 
+ 	if (!device_is_compatible(tps->dev, "ti,tps25750")) {
+ 		ret = tps6598x_read32(tps, TPS_REG_VID, &vid);
+-		if (ret < 0 || !vid)
++		if (ret < 0)
++			return ret;
++		if (!vid)
+ 			return -ENODEV;
+ 	}
+ 
+diff --git a/drivers/usb/typec/tipd/tps6598x.h b/drivers/usb/typec/tipd/tps6598x.h
+index 6cf66941..17b01d2c 100644
+--- a/drivers/usb/typec/tipd/tps6598x.h
++++ b/drivers/usb/typec/tipd/tps6598x.h
+@@ -358,6 +358,7 @@ struct cd321x_status {
+ 	u32 pwr_status;
+ 	u32 data_status;
+ 	u32 status_changed;
++	u32 data_status_changed;
+ 	struct usb_pd_identity partner_identity;
+ 	struct tps6598x_dp_sid_status_reg dp_sid_status;
+ 	struct tps6598x_intel_vid_status_reg intel_vid_status;
+@@ -382,6 +383,8 @@ struct cd321x {
+ 	struct cd321x_status update_status;
+ 	struct delayed_work update_work;
+ 	struct usb_pd_identity cur_partner_identity;
++
++	struct fwnode_handle *connector_fwnode;
+ };
+ 
+ struct sn201202x {

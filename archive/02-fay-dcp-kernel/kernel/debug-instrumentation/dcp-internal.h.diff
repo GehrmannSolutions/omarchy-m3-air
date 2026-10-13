@@ -1,0 +1,81 @@
+--- drivers/gpu/drm/apple/dcp-internal.h	2026-10-11 19:39:06.480008728 +0200
++++ ~/.cache/fay-build/wip/drivers/gpu/drm/apple/dcp-internal.h	2026-10-10 02:17:40.256700129 +0200
+@@ -5,6 +5,7 @@
+ #define __APPLE_DCP_INTERNAL_H__
+ 
+ #include <linux/backlight.h>
++#include <linux/debugfs.h>
+ #include <linux/device.h>
+ #include <linux/ioport.h>
+ #include <linux/mutex.h>
+@@ -109,6 +110,51 @@
+ 	u32 num_dptx_ports;
+ };
+ 
++/*
++ * fay: DART fault instrumentation (debug only, no functional change).
++ * Records the DVAs handed to the firmware by D411 map_reg and D452
++ * map_physical so the IOMMU sweep can compare them with the page table,
++ * and keeps copies of RTKit crashlogs for debugfs.
++ */
++#define FAY_MAX_REGMAPS		64	/* ring: the newest entries are kept */
++#define FAY_MAX_CRASHLOGS	4
++
++struct fay_regmap {
++	u64 dva;
++	u64 pa;
++	u64 size;
++	u32 tag;	/* 411 = map_reg, 452 = map_physical */
++	u32 index;	/* D411 register index, D452 mem_desc_id */
++	/* 1-based record number while valid, 0 while being (re)written */
++	unsigned int seq;
++};
++
++/* A callback frame, so that a deferred ack can log the final reply. */
++struct fay_cb_frame {
++	int tag;
++	u32 out_len;
++	bool valid;	/* callback at this depth not acked yet */
++	bool logged;	/* final reply already logged (synchronous ack) */
++};
++
++struct fay_dcp_debug {
++	/* /sys/kernel/debug/fay-dcp/<dev_name>/ */
++	struct dentry *dir;
++	/* cleanup action registered, crashlog copies will be freed on unbind */
++	bool ready;
++	struct debugfs_blob_wrapper crashlog[FAY_MAX_CRASHLOGS];
++	unsigned int nr_crashlogs;
++	/*
++	 * Ring of D411/D452 mappings, written only from the RTKit (ordered)
++	 * workqueue. nr_regmaps counts every record ever made (published with
++	 * release); record n (1-based) lives in slot (n - 1) % FAY_MAX_REGMAPS.
++	 */
++	struct fay_regmap regmaps[FAY_MAX_REGMAPS];
++	unsigned int nr_regmaps;
++	/* per context and call depth, RTKit worker only */
++	struct fay_cb_frame cb_frames[DCP_NUM_CONTEXTS][DCP_MAX_CALL_DEPTH];
++};
++
+ /* TODO: move IOMFB members to its own struct */
+ struct apple_dcp {
+ 	struct device *dev;
+@@ -263,8 +309,18 @@
+ 	u32 dptx_phy;
+ 	u32 dptx_die;
+ 	int hdmi_hpd_irq;
++
++	/* fay: DART fault instrumentation */
++	struct fay_dcp_debug fay;
+ };
+ 
++struct seq_file;
++
++/* fay: DART fault instrumentation, implemented in dcp.c */
++void fay_dcp_record_map(struct apple_dcp *dcp, u32 tag, u32 index, u64 pa,
++			u64 size, u64 dva);
++void fay_dcp_sweep(struct apple_dcp *dcp, const char *why, struct seq_file *m);
++
+ void dcp_drm_crtc_page_flip(struct apple_dcp *dcp, ktime_t now);
+ 
+ int dcp_backlight_register(struct apple_dcp *dcp);

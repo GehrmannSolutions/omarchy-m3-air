@@ -1,0 +1,37 @@
+diff --git i/src/kboot.c w/src/kboot.c
+index 70f1d99b..92d3fcac 100644
+--- i/src/kboot.c
++++ w/src/kboot.c
+@@ -2153,7 +2153,14 @@ static int dt_set_display(void)
+          * helpers above (they bail out of kboot or enable nodes) and never enables a node.
+          * On T8122 it does nothing unless chosen.asahi,t8122-dcp=1.
+          */
+-        return dt_set_display_handoff(dt);
++        ret = dt_set_display_handoff(dt);
++        /*
++         * dcpext is not part of the iBoot handoff: reserve its ASC firmware and
++         * enable it as on t8112. The node stays disabled if anything is missing.
++         */
++        if (!fdt_node_check_compatible(dt, 0, "apple,t8122"))
++            dt_reserve_dcpext_firmware();
++        return ret;
+     } else {
+         printf("FDT: unknown compatible, skip display reserved-memory setup\n");
+         return 0;
+diff --git i/src/utils.c w/src/utils.c
+index fd8b2cde..c6526b36 100644
+--- i/src/utils.c
++++ w/src/utils.c
+@@ -283,3 +283,12 @@ void cpu_sleep(bool deep)
+         sysop("wfi");
+     }
+ }
++
++/* fay: newer Rust core references wcslen; m1n1 has no libc. */
++__attribute__((weak)) size_t wcslen(const int *s)
++{
++    size_t n = 0;
++    while (s[n])
++        n++;
++    return n;
++}

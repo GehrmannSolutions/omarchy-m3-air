@@ -1,0 +1,410 @@
+From 9deea7785be684d888b25f33a05a17a3b2bf4329 Mon Sep 17 00:00:00 2001
+From: Fay <marius@gehrmann.solutions>
+Date: Mon, 12 Oct 2026 00:38:23 +0200
+Subject: [PATCH 3/3] LOCAL TEST ONLY: drm: asahi: t8122: Add an opt-in DPE
+ leakage block
+
+Not part of the series. The current14 GPU firmware on this J613 only
+starts with the DPE leakage block that satchlj measured under macOS
+(omacom/linux-aurora#26): asahi.t8122_dpe_leak=1 writes it. Carried here
+so that the test kernel has a working GPU, as the daily kernel does.
+
+Assisted-by: Claude:claude-opus-5-5
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_017YMqWu7A3VwEYtHaA1TusK
+---
+ drivers/gpu/drm/asahi/fw/initdata.rs   |  8 +++
+ drivers/gpu/drm/asahi/initdata.rs      |  4 +-
+ drivers/gpu/drm/asahi/m3_adt_config.rs | 41 ++++++++++++++
+ drivers/gpu/drm/asahi/m3_params.rs     |  9 +++
+ drivers/gpu/drm/asahi/t8122_knobs.rs   | 76 +++++++++++++++++++++++++-
+ drivers/gpu/drm/asahi/t8122_start.rs   | 34 ++++++++++--
+ 6 files changed, 166 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/gpu/drm/asahi/fw/initdata.rs b/drivers/gpu/drm/asahi/fw/initdata.rs
+index 56c236170..31f79d065 100644
+--- a/drivers/gpu/drm/asahi/fw/initdata.rs
++++ b/drivers/gpu/drm/asahi/fw/initdata.rs
+@@ -2467,6 +2467,8 @@ mod g15_layout {
+     static_assert!(offset_of!(PowerCtlBlock, se_engagement) == 0xec);
+     static_assert!(offset_of!(PowerCtlBlock, dpe_leak_cfg_a) == 0x158);
+     static_assert!(offset_of!(PowerCtlBlock, dpe_leak_cfg_b) == 0x1a8);
++    static_assert!(offset_of!(PowerCtlBlock, unk_15c) == 0x15c);
++    static_assert!(offset_of!(PowerCtlBlock, dpe_leak_coefs) == 0x168);
+     static_assert!(offset_of!(PowerCtlBlock, clpc_shared_a) == 0x1b4);
+     static_assert!(offset_of!(PowerCtlBlock, perf_ctrl_override_active) == 0x1d0);
+     static_assert!(offset_of!(PowerCtlBlock, consistent_perf_state) == 0x1d1);
+@@ -2570,6 +2572,12 @@ mod g15_layout {
+     static_assert!(offset_of!(HwDataAG15V14_8_3, unk_e28) == 0x1294);
+     static_assert!(offset_of!(HwDataAG15V14_8_3, fast_die0_sensor_mask_alt) == 0x1a98);
+     static_assert!(offset_of!(HwDataAG15V14_8_3, unk_3640) == 0x3aa4);
++    // The G13 leakage arrays over the G15 DPE leakage config (+0x4188..+0x41dc).
++    static_assert!(offset_of!(HwDataAG15V14_8_3, core_leak_coef) == 0x417c);
++    static_assert!(offset_of!(HwDataAG15V14_8_3, sram_leak_coef) == 0x419c);
++    static_assert!(offset_of!(HwDataAG15V14_8_3, aux_leak_coef) == 0x41bc);
++    static_assert!(offset_of!(HwDataAG15V14_8_3, unk_3d34_0) == 0x41dc);
++    static_assert!(offset_of!(HwDataAG15V14_8_3, temp_c) == 0x1c4);
+     static_assert!(offset_of!(HwDataAG15V14_8_3, init_timestamp) == 0x424c);
+     static_assert!(offset_of!(HwDataAG15V14_8_3, cluster_tables) == 0x42a4);
+     static_assert!(offset_of!(HwDataAG15V14_8_3, unk_4340) == 0x4340);
+diff --git a/drivers/gpu/drm/asahi/initdata.rs b/drivers/gpu/drm/asahi/initdata.rs
+index fcb253373..e2ac09320 100644
+--- a/drivers/gpu/drm/asahi/initdata.rs
++++ b/drivers/gpu/drm/asahi/initdata.rs
+@@ -734,7 +734,9 @@ pub(crate) fn hwdata_a_init(
+                     // On G15 the G13 leak-coefficient arrays overlap the DPE leakage config
+                     // (HwDataA +0x4188), so they stay zero.
+                     // TODO: write leakage data in the 0x4188 layout (mirrored at P1
+-                    // +0x158..0x1ab) once its source is understood.
++                    // +0x158..0x1ab) once its source is understood. For an A/B, the T8122 start
++                    // experiment writes the block macOS 26 uses on a 10-core J613 at +0x418c (and
++                    // P1 +0x15c) with asahi.t8122_dpe_leak (m3_adt_config::build_images).
+                     #[ver(V < V14_8_3)]
+                     for (i, coef) in pwr.core_leak_coef.iter().enumerate() {
+                         raw.core_leak_coef[i] = *coef;
+diff --git a/drivers/gpu/drm/asahi/m3_adt_config.rs b/drivers/gpu/drm/asahi/m3_adt_config.rs
+index b074b0805..2380042cf 100644
+--- a/drivers/gpu/drm/asahi/m3_adt_config.rs
++++ b/drivers/gpu/drm/asahi/m3_adt_config.rs
+@@ -23,6 +23,7 @@
+     m3_memory::Buffer,
+     m3_params::{self, G15Debug, InitDataParam, ThermalMode},
+     m3_soc::{IoMapping, PstateTable, Soc},
++    t8122_knobs::{self as knobs, DpeLeak},
+     t8122_start::Experiment,
+ };
+ 
+@@ -722,6 +723,23 @@ fn whole(v: F32) -> u32 {
+     }
+ }
+ 
++/// Write the DPE leakage block (`t8122_knobs::DPE_LEAK_WORDS`, little-endian u32) at `at` in
++/// `image`, and say when it replaces words that were not 0 (on T8122 14.8.3 they all are).
++fn write_dpe_leak(dev: &device::Device, image: &mut [u8], at: usize, what: &str) -> Result {
++    let mut replaced = 0;
++    for (i, word) in knobs::DPE_LEAK_WORDS.iter().enumerate() {
++        let offset = at + 4 * i;
++        if read_u32(image, offset)? != 0 {
++            replaced += 1;
++        }
++        write(image, offset, &word.to_le_bytes())?;
++    }
++    if replaced != 0 {
++        dev_warn!(dev, "M3: DPE leakage block replaced {} nonzero {} words\n", replaced, what);
++    }
++    Ok(())
++}
++
+ /// A zeroed image of owner `index`.
+ fn zeroed(index: usize) -> Result<KVVec<u8>> {
+     let size = storage::allocation(index).map_err(|_| EINVAL)?.size;
+@@ -888,6 +906,12 @@ fn build_images(
+     for &(at, value) in soc.hwdata_words {
+         write(&mut hwdata, at, &value.to_le_bytes())?;
+     }
++    // The T8122 start experiment's DPE leakage block (`asahi.t8122_dpe_leak`), over everything
++    // above. Off by default, and then nothing is written.
++    let dpe_leak = experiment.map_or(DpeLeak::Off, |e| e.dpe_leak());
++    if dpe_leak != DpeLeak::Off {
++        write_dpe_leak(dev, &mut hwdata, HWDATA_A + knobs::DPE_LEAK_HWDATA_A, "HwDataA")?;
++    }
+     // On T8122, log and require the two HwDataB words the firmware's power management depends
+     // on: it powers the GPU cores up for a job only when +0xa38 and +0xa40 are both nonzero.
+     if core::ptr::eq(soc, &crate::m3_soc::T8122) {
+@@ -935,6 +959,23 @@ fn build_images(
+ 
+     let mut power = zeroed(GLOBALS_POWER)?;
+     write(&mut power, 0, initdata::raw_bytes(&*c.power_ctl_block))?;
++    if dpe_leak == DpeLeak::HwDataAAndP1 {
++        write_dpe_leak(dev, &mut power, knobs::DPE_LEAK_P1, "P1")?;
++    }
++    if dpe_leak != DpeLeak::Off {
++        let mirror = match dpe_leak {
++            DpeLeak::HwDataAAndP1 => ", P1 mirror +0x15c",
++            _ => "",
++        };
++        dev_warn!(
++            dev,
++            "M3: DPE leakage block set (HwDataA+{:#x}, {} words{}) (asahi.t8122_dpe_leak={})\n",
++            knobs::DPE_LEAK_HWDATA_A,
++            knobs::DPE_LEAK_WORDS.len(),
++            mirror,
++            dpe_leak.value()
++        );
++    }
+     images[GLOBALS_POWER] = Some(power);
+ 
+     let mut status = zeroed(STATUS)?;
+diff --git a/drivers/gpu/drm/asahi/m3_params.rs b/drivers/gpu/drm/asahi/m3_params.rs
+index d09a16bd9..ec215239a 100644
+--- a/drivers/gpu/drm/asahi/m3_params.rs
++++ b/drivers/gpu/drm/asahi/m3_params.rs
+@@ -582,6 +582,10 @@ fn parse_t8122_sgx_setup(text: &str) -> Option<u64> {
+     Some(crate::t8122_knobs::parse_sgx_setup(text))
+ }
+ 
++fn parse_t8122_dpe_leak(text: &str) -> Option<u64> {
++    Some(crate::t8122_knobs::parse_dpe_leak(text))
++}
++
+ // The T8122 start experiment (`t8122_start`). Each parameter is stored as given, unset or with a
+ // value its parser does not accept (`t8122_knobs`), so that the experiment can refuse rather
+ // than fall back to a default.
+@@ -612,6 +616,10 @@ fn parse_t8122_sgx_setup(text: &str) -> Option<u64> {
+ /// `asahi.t8122_pstate_cap=N`: the highest performance state the T8122 firmware may use.
+ static T8122_PSTATE_CAP: AtomicU64 = AtomicU64::new(T8122_UNSET);
+ m3_param!("t8122_pstate_cap", T8122_PSTATE_CAP, parse_t8122_number);
++/// `asahi.t8122_dpe_leak=0|1|2`: the DPE leakage block (`t8122_knobs::DPE_LEAK_WORDS`): 0 (off,
++/// the default) none, 1 at HwDataA +0x418c, 2 there and at its P1 mirror +0x15c.
++static T8122_DPE_LEAK: AtomicU64 = AtomicU64::new(T8122_UNSET);
++m3_param!("t8122_dpe_leak", T8122_DPE_LEAK, parse_t8122_dpe_leak);
+ 
+ /// The T8122 start-experiment parameters of this boot, as given.
+ pub(crate) fn t8122_params() -> crate::t8122_knobs::Raw {
+@@ -625,5 +633,6 @@ pub(crate) fn t8122_params() -> crate::t8122_knobs::Raw {
+         unit_mask_a: get(&T8122_UNIT_MASK_A),
+         unit_mask_b: get(&T8122_UNIT_MASK_B),
+         pstate_cap: get(&T8122_PSTATE_CAP),
++        dpe_leak: get(&T8122_DPE_LEAK),
+     }
+ }
+diff --git a/drivers/gpu/drm/asahi/t8122_knobs.rs b/drivers/gpu/drm/asahi/t8122_knobs.rs
+index f9c3ff080..11d2d554e 100644
+--- a/drivers/gpu/drm/asahi/t8122_knobs.rs
++++ b/drivers/gpu/drm/asahi/t8122_knobs.rs
+@@ -32,6 +32,43 @@
+ /// J613/J615 have no SoC die temperature zone yet, so there is no thermal feedback above it.
+ pub(crate) const PSTATE_CAP_MAX: u32 = 5;
+ 
++/// The DPE leakage block macOS 26 writes on a 10-core J613 (satchlj, omacom/linux-aurora#26,
++/// 2026-10-11): 20 integer words, written to HwDataA +0x418c..+0x41dc and, with
++/// [`DpeLeak::HwDataAAndP1`], to the power-controller block's mirror at P1 +0x15c..+0x1ac.
++/// They are u32 values, not float bit patterns.
++pub(crate) const DPE_LEAK_WORDS: [u32; 20] = [
++    1, 500, 5, //
++    12500, 12500, 12500, 12500, 12500, //
++    3000, 3000, 3000, //
++    12500, 12500, 12500, 12500, 12500, 12500, 12500, 12500, //
++    1,
++];
++/// Where the block starts in HwDataA and in the power-controller block (P1).
++pub(crate) const DPE_LEAK_HWDATA_A: usize = 0x418c;
++pub(crate) const DPE_LEAK_P1: usize = 0x15c;
++
++/// What `asahi.t8122_dpe_leak` writes.
++#[derive(Copy, Clone, Debug, PartialEq, Eq)]
++pub(crate) enum DpeLeak {
++    /// 0, the default: nothing; the InitData is the same as without the parameter.
++    Off,
++    /// 1: [`DPE_LEAK_WORDS`] at HwDataA +0x418c.
++    HwDataA,
++    /// 2: the same, and at P1 +0x15c.
++    HwDataAAndP1,
++}
++
++impl DpeLeak {
++    /// The parameter value, for logs.
++    pub(crate) fn value(self) -> u32 {
++        match self {
++            DpeLeak::Off => 0,
++            DpeLeak::HwDataA => 1,
++            DpeLeak::HwDataAAndP1 => 2,
++        }
++    }
++}
++
+ /// Parse a decimal or `0x`-prefixed hexadecimal `u64`. A leading sign is not accepted.
+ fn number(text: &str) -> Option<u64> {
+     if text.starts_with(['+', '-']) {
+@@ -70,6 +107,10 @@ pub(crate) fn parse_sgx_setup(text: &str) -> u64 {
+     parse(text, &[("none", 0), ("t6030", 1)])
+ }
+ 
++pub(crate) fn parse_dpe_leak(text: &str) -> u64 {
++    parse(text, &[("off", 0)])
++}
++
+ /// The parameters as given: [`UNSET`], [`INVALID`] or a value.
+ #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+ pub(crate) struct Raw {
+@@ -81,6 +122,7 @@ pub(crate) struct Raw {
+     pub(crate) unit_mask_a: u64,
+     pub(crate) unit_mask_b: u64,
+     pub(crate) pstate_cap: u64,
++    pub(crate) dpe_leak: u64,
+ }
+ 
+ impl Raw {
+@@ -95,6 +137,7 @@ impl Raw {
+         unit_mask_a: UNSET,
+         unit_mask_b: UNSET,
+         pstate_cap: UNSET,
++        dpe_leak: UNSET,
+     };
+ 
+     /// Whether any parameter other than `asahi.t8122_start` was given.
+@@ -107,6 +150,7 @@ pub(crate) fn values_given(&self) -> bool {
+             self.unit_mask_a,
+             self.unit_mask_b,
+             self.pstate_cap,
++            self.dpe_leak,
+         ]
+         .iter()
+         .any(|v| *v != UNSET)
+@@ -151,6 +195,7 @@ pub(crate) struct Values {
+     pub(crate) unit_mask_a: u64,
+     pub(crate) unit_mask_b: u32,
+     pub(crate) pstate_cap: u32,
++    pub(crate) dpe_leak: DpeLeak,
+ }
+ 
+ /// A parameter given with a value it does not accept: its name and what it accepts.
+@@ -198,6 +243,12 @@ pub(crate) fn resolve(raw: &Raw) -> Result<Values, Refusal> {
+     let pstate_cap = given(raw.pstate_cap, PSTATE_CAP as u64)
+         .filter(|v| (1..=u64::from(PSTATE_CAP_MAX)).contains(v))
+         .ok_or(refuse("t8122_pstate_cap", "1 to 5"))? as u32;
++    let dpe_leak = match given(raw.dpe_leak, 0) {
++        Some(0) => DpeLeak::Off,
++        Some(1) => DpeLeak::HwDataA,
++        Some(2) => DpeLeak::HwDataAAndP1,
++        _ => return Err(refuse("t8122_dpe_leak", "0 or off, 1, 2")),
++    };
+     Ok(Values {
+         initdata_version,
+         fender,
+@@ -206,6 +257,7 @@ pub(crate) fn resolve(raw: &Raw) -> Result<Values, Refusal> {
+         unit_mask_a,
+         unit_mask_b,
+         pstate_cap,
++        dpe_leak,
+     })
+ }
+ 
+@@ -241,6 +293,7 @@ fn defaults_are_the_plan_baseline() {
+         assert_eq!(v.sgx_setup, Some((0xd1_4000, 0x7_0001)));
+         assert_eq!((v.unit_mask_a, v.unit_mask_b), (0x7_0000_0003, 7));
+         assert_eq!(v.pstate_cap, 2);
++        assert_eq!(v.dpe_leak, DpeLeak::Off);
+     }
+ 
+     #[test]
+@@ -273,7 +326,9 @@ fn every_alternative_resolves() {
+ 
+     #[test]
+     fn unaccepted_values_refuse_and_name_the_parameter() {
+-        let cases: [(fn(&mut Raw), &str); 15] = [
++        let cases: [(fn(&mut Raw), &str); 17] = [
++            (|r| r.dpe_leak = parse_dpe_leak("3"), "t8122_dpe_leak"),
++            (|r| r.dpe_leak = parse_dpe_leak("on"), "t8122_dpe_leak"),
+             (|r| r.initdata_version = parse_number("g15s"), "t8122_initdata_version"),
+             (|r| r.initdata_version = 0, "t8122_initdata_version"),
+             (|r| r.fender = parse_fender("0x144000"), "t8122_fender"),
+@@ -306,6 +361,25 @@ fn pstate_cap_accepts_one_to_five_only() {
+         assert_eq!(PSTATE_CAP_MAX, 5);
+     }
+ 
++    #[test]
++    fn dpe_leak_values() {
++        assert!(with(|r| r.dpe_leak = 1).values_given());
++        let get = |t: &str| resolve(&with(|r| r.dpe_leak = parse_dpe_leak(t))).unwrap().dpe_leak;
++        assert_eq!(get("0"), DpeLeak::Off);
++        assert_eq!(get("off"), DpeLeak::Off);
++        assert_eq!(get("1"), DpeLeak::HwDataA);
++        assert_eq!(get("2"), DpeLeak::HwDataAAndP1);
++        // The block: 1, 500, 5, 12500 x5, 3000 x3, 12500 x8, 1; 0x418c..0x41dc and 0x15c..0x1ac.
++        assert_eq!(DPE_LEAK_WORDS.len(), 20);
++        assert_eq!(DPE_LEAK_WORDS[..3], [1, 500, 5]);
++        assert!(DPE_LEAK_WORDS[3..8].iter().all(|w| *w == 12500));
++        assert!(DPE_LEAK_WORDS[8..11].iter().all(|w| *w == 3000));
++        assert!(DPE_LEAK_WORDS[11..19].iter().all(|w| *w == 12500));
++        assert_eq!(DPE_LEAK_WORDS[19], 1);
++        assert_eq!(DPE_LEAK_HWDATA_A + 4 * DPE_LEAK_WORDS.len(), 0x41dc);
++        assert_eq!(DPE_LEAK_P1 + 4 * DPE_LEAK_WORDS.len(), 0x1ac);
++    }
++
+     #[test]
+     fn a_leading_sign_is_rejected() {
+         for text in ["+1", "-1", "0x+1", "0x-1", "+0x10"] {
+diff --git a/drivers/gpu/drm/asahi/t8122_start.rs b/drivers/gpu/drm/asahi/t8122_start.rs
+index cf0ee658e..33492412e 100644
+--- a/drivers/gpu/drm/asahi/t8122_start.rs
++++ b/drivers/gpu/drm/asahi/t8122_start.rs
+@@ -17,6 +17,7 @@
+ //! | `asahi.t8122_unit_mask_a` | `0x700000003` | nonzero, within `0x700000003` |
+ //! | `asahi.t8122_unit_mask_b` | `0x7` | nonzero, within `0x7` |
+ //! | `asahi.t8122_pstate_cap` | `2` | 1 to 5 |
++//! | `asahi.t8122_dpe_leak` | `0` (`off`): no DPE leakage block | `1`: HwDataA +0x418c; `2`: and P1 +0x15c |
+ //!
+ //! The defaults are the T8122 table's values. A parameter given with a value it does not accept
+ //! refuses the start. Without `asahi.t8122_start=1` nothing here runs, and T8122 is refused.
+@@ -34,8 +35,8 @@
+     m3_soc::{IoMapping, Soc, T8122_HWDATA_B},
+     pgtable::{prot, Prot},
+     t8122_knobs::{
+-        self as knobs, ClockGen, Start, Values, CLOCK_GEN_E1C, CLOCK_GEN_E5C, FENDER_ADT,
+-        FENDER_RULE,
++        self as knobs, ClockGen, DpeLeak, Start, Values, CLOCK_GEN_E1C, CLOCK_GEN_E5C,
++        FENDER_ADT, FENDER_RULE,
+     },
+ };
+ 
+@@ -138,6 +139,25 @@
+     assert!(knobs::UNIT_MASK_B as u64 & !knobs::UNIT_MASK_B_LIMIT == 0);
+     assert!(offset_of!(raw::HwDataBG15V14_8_3, unit_mask_a) == 0x17c0);
+     assert!(offset_of!(raw::HwDataBG15V14_8_3, unit_mask_b) == 0x17c8);
++    // The DPE leakage block (`asahi.t8122_dpe_leak`): HwDataA +0x418c..+0x41dc is the 14.8.3
++    // structure's core_leak_coef[4..8], sram_leak_coef[0..8] and aux_leak_coef (G13 names; the
++    // builder leaves them 0 on 14.8.3 and T8122 has no CS/AFR), ending where unk_3d34_0 starts,
++    // all inside the HwDataA the firmware is given (its pointer is HwData +0x4580). In P1 it is
++    // unk_15c..dpe_leak_cfg_b: 3 words, the 0x40-byte coefficient array, 1 word.
++    {
++        type A = raw::HwDataAG15V14_8_3;
++        type P1 = raw::PowerCtlBlock;
++        let end_a = knobs::DPE_LEAK_HWDATA_A + 4 * knobs::DPE_LEAK_WORDS.len();
++        let end_p1 = knobs::DPE_LEAK_P1 + 4 * knobs::DPE_LEAK_WORDS.len();
++        assert!(offset_of!(A, core_leak_coef) + 4 * 4 == knobs::DPE_LEAK_HWDATA_A);
++        assert!(offset_of!(A, unk_3d34_0) == end_a);
++        assert!(end_a <= core::mem::size_of::<A>());
++        assert!(offset_of!(P1, unk_15c) == knobs::DPE_LEAK_P1);
++        assert!(offset_of!(P1, dpe_leak_coefs) == knobs::DPE_LEAK_P1 + 3 * 4);
++        assert!(offset_of!(P1, dpe_leak_cfg_b) + 4 == end_p1);
++        assert!(offset_of!(P1, dpe_leak_cfg_b) == knobs::DPE_LEAK_P1 + 19 * 4);
++        assert!(end_p1 <= core::mem::size_of::<P1>());
++    }
+     // An armed start skips `require_complete`. The only `unported` item of the T8122 table is the
+     // opt-in itself; if another is added, this fails the build until the start accounts for it.
+     assert!(crate::m3_soc::T8122.unported.len() == 1);
+@@ -224,6 +244,11 @@ pub(crate) fn sgx_setup(&self) -> Option<(usize, u32)> {
+     pub(crate) fn pstate_cap(&self) -> u32 {
+         self.0.pstate_cap
+     }
++
++    /// Where the DPE leakage block goes (`asahi.t8122_dpe_leak`).
++    pub(crate) fn dpe_leak(&self) -> DpeLeak {
++        self.0.dpe_leak
++    }
+ }
+ 
+ /// Firmware page protection of the IO map of `slot`, with the read-only slots `read_only`.
+@@ -283,7 +308,7 @@ pub(crate) fn arm(dev: &device::Device, soc: &Soc) -> Result<Option<Experiment>>
+     let e = Experiment(v);
+     dev_warn!(
+         dev,
+-        "M3 G15G start: armed (asahi.t8122_start=1, boot loader handoff admitted): initdata_version={:#018x} fender={:#x} clkgen={} sgx_setup={} unit_mask_a={:#x} unit_mask_b={:#x} pstate_cap={}\n",
++        "M3 G15G start: armed (asahi.t8122_start=1, boot loader handoff admitted): initdata_version={:#018x} fender={:#x} clkgen={} sgx_setup={} unit_mask_a={:#x} unit_mask_b={:#x} pstate_cap={} dpe_leak={}\n",
+         v.initdata_version,
+         v.fender,
+         clkgen_label(v.clock_gen, v.fender),
+@@ -293,7 +318,8 @@ pub(crate) fn arm(dev: &device::Device, soc: &Soc) -> Result<Option<Experiment>>
+         },
+         v.unit_mask_a,
+         v.unit_mask_b,
+-        v.pstate_cap
++        v.pstate_cap,
++        v.dpe_leak.value()
+     );
+     dev_warn!(
+         dev,
+-- 
+2.56.0
+

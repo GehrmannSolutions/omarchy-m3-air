@@ -1,0 +1,201 @@
+From a3827f11ca80f2f1a18a86d16dfd79897719b0ea Mon Sep 17 00:00:00 2001
+From: Marius Gehrmann <marius@gehrmann.solutions>
+Date: Mon, 12 Oct 2026 21:12:41 +0200
+Subject: [PATCH 02/12] arm64: dts: apple: t8122: Add dcpext and its display
+ crossbars
+
+Describe the external display coprocessor (dcpext) and what it needs:
+the dispext0 and dcpext DARTs, the dcpext mailbox, the dispext0 clock,
+the bw-scratch cell count on pmgr_dcp for the dcpext's bandwidth scratch
+page, and the display crossbars of ATC0 and ATC1 that route a display
+pipe to the ATC's DisplayPort PHY (at the ATC base + 0x4c000, in the
+ATC's USB power domain; atc0-dpxbar and atc1-dpxbar in the ADT,
+T6020-compatible).
+
+All of it stays disabled; a board enables what its Type-C display
+routes use. The values come from the T8122 ADT; the node layout follows
+the dcpext description used with asahi-wip-7.2 and AsahiLinux/linux#607
+and #608 on this SoC.
+
+Link: https://github.com/AsahiLinux/linux/pull/607
+Link: https://github.com/AsahiLinux/linux/pull/608
+Assisted-by: Claude:claude-opus-5-5
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_017YMqWu7A3VwEYtHaA1TusK
+Signed-off-by: Marius Gehrmann <marius@gehrmann.solutions>
+---
+ arch/arm64/boot/dts/apple/t8122-dcp.dtsi | 104 ++++++++++++++++++++++-
+ arch/arm64/boot/dts/apple/t8122.dtsi     |  24 ++++++
+ 2 files changed, 127 insertions(+), 1 deletion(-)
+
+diff --git a/arch/arm64/boot/dts/apple/t8122-dcp.dtsi b/arch/arm64/boot/dts/apple/t8122-dcp.dtsi
+index 6787b4f8d..c4b9eb2c6 100644
+--- a/arch/arm64/boot/dts/apple/t8122-dcp.dtsi
++++ b/arch/arm64/boot/dts/apple/t8122-dcp.dtsi
+@@ -1,6 +1,7 @@
+ // SPDX-License-Identifier: GPL-2.0+ OR MIT
+ /*
+- * T8122 (M3 MacBook Air, J613/J615) internal display.
++ * T8122 (M3 MacBook Air, J613/J615) internal display and the external display
++ * processor (dcpext, at the end of this file).
+  *
+  * Like T6030, the internal DCP, its mailbox, the two display DARTs and the
+  * display subsystem are all described here as status = "disabled". Kernels
+@@ -37,6 +38,14 @@ clk_disp0: clock-disp0 {
+ 		clock-frequency = <712000000>;
+ 		clock-output-names = "clk_disp0";
+ 	};
++
++	/* Rate unknown, as on T8112 and T602x. */
++	clk_dispext0: clock-dispext0 {
++		compatible = "fixed-clock";
++		#clock-cells = <0>;
++		clock-frequency = <0>;
++		clock-output-names = "clk_dispext0";
++	};
+ };
+ 
+ &{/soc} {
+@@ -106,4 +115,97 @@ display: display-subsystem {
+ 		iommus = <&disp0_dart 0>;
+ 		status = "disabled";
+ 	};
++
++	/*
++	 * The pmgr dashboard page (ADT disp0/dispext0 reg 5). The internal
++	 * DCP lists it as its "disp-5" range; the external one finds it
++	 * through apple,bw-scratch, as on T8112 and T602x.
++	 */
++	pmgr_dcp: power-management@2d03d0000 {
++		reg = <0x2 0xd03d0000 0x0 0x4000>;
++		reg-names = "dcp-fw-pmgr";
++		#apple,bw-scratch-cells = <3>;
++	};
++
++	/*
++	 * The external display processor (ADT dispext0, dcpext, dart-dispext0
++	 * and dart-dcpext). Unlike the internal one it is not handed over by
++	 * the boot loader: the boot loader only reserves its firmware and then
++	 * enables the dcpext node, and the driver starts it. The board enables
++	 * the DARTs and the mailbox and adds the Type-C routes.
++	 *
++	 * The DMA windows are the ones the working asahi-based kernel uses per
++	 * stream: dcpext stream 5 at 0x8_0000_0000 and PIODMA stream 4 from 0
++	 * (as on T8112). The display subsystem's stream 0 on dispext0_dart
++	 * takes its window from disp0_dart, the first DART of that device.
++	 */
++	dispext0_dart: iommu@319304000 {
++		compatible = "apple,t8122-dart", "apple,t8110-dart";
++		reg = <0x3 0x19304000 0x0 0x4000>;
++		interrupt-parent = <&aic>;
++		interrupts = <AIC_IRQ 599 IRQ_TYPE_LEVEL_HIGH>;
++		#iommu-cells = <1>;
++		apple,dma-range = <0x0 0x0 0xf 0xffff0000>;
++		power-domains = <&ps_dispext_cpu>;
++		status = "disabled";
++	};
++
++	dcpext_dart: iommu@31930c000 {
++		compatible = "apple,t8122-dart", "apple,t8110-dart";
++		reg = <0x3 0x1930c000 0x0 0x4000>;
++		interrupt-parent = <&aic>;
++		interrupts = <AIC_IRQ 599 IRQ_TYPE_LEVEL_HIGH>;
++		#iommu-cells = <1>;
++		apple,dma-range = <0x8 0x0 0x7 0xffff0000>;
++		power-domains = <&ps_dispext_cpu>;
++		status = "disabled";
++	};
++
++	dcpext_mbox: mailbox@31ac08000 {
++		compatible = "apple,t8122-asc-mailbox", "apple,asc-mailbox-v4";
++		reg = <0x3 0x1ac08000 0x0 0x4000>;
++		interrupt-parent = <&aic>;
++		interrupts = <AIC_IRQ 582 IRQ_TYPE_LEVEL_HIGH>,
++			     <AIC_IRQ 583 IRQ_TYPE_LEVEL_HIGH>,
++			     <AIC_IRQ 584 IRQ_TYPE_LEVEL_HIGH>,
++			     <AIC_IRQ 585 IRQ_TYPE_LEVEL_HIGH>;
++		interrupt-names = "send-empty", "send-not-empty",
++				  "recv-empty", "recv-not-empty";
++		#mbox-cells = <0>;
++		power-domains = <&ps_dispext_cpu>;
++		resets = <&ps_dispext_cpu>;
++		status = "disabled";
++	};
++
++	/*
++	 * Six ranges as in the ADT dispext0 node: coproc and disp-0 to disp-4,
++	 * including the second aperture at 0x318800000. The firmware maps them
++	 * by index, so disp-5, the pmgr dashboard page, is apple,bw-scratch
++	 * index 5 (scratch offset 0x910; the internal DCP's is 0x908).
++	 */
++	dcpext: dcp@31ac00000 {
++		compatible = "apple,t8122-dcpext", "apple,dcpext";
++		mboxes = <&dcpext_mbox>;
++		mbox-names = "mbox";
++		iommus = <&dcpext_dart 5>;
++		reg-names = "coproc", "disp-0", "disp-1", "disp-2", "disp-3",
++			    "disp-4";
++		reg = <0x3 0x1ac00000 0x0 0x4000>,
++		      <0x3 0x18000000 0x0 0x690000>,
++		      <0x3 0x18800000 0x0 0x690000>,
++		      <0x3 0x19320000 0x0 0x4000>,
++		      <0x3 0x19344000 0x0 0x4000>,
++		      <0x3 0x1a800000 0x0 0x800000>;
++		apple,bw-scratch = <&pmgr_dcp 0 5 0x910>;
++		apple,iomfb-surfaces = <1 1 0 1>;
++		power-domains = <&ps_dispext_cpu>;
++		resets = <&ps_dispext_cpu>;
++		clocks = <&clk_dispext0>;
++		apple,dcp-index = <1>;
++		status = "disabled";
++
++		dcpext_piodma: piodma {
++			iommus = <&dispext0_dart 4>;
++		};
++	};
+ };
+diff --git a/arch/arm64/boot/dts/apple/t8122.dtsi b/arch/arm64/boot/dts/apple/t8122.dtsi
+index 99047d21e..8678cabd1 100644
+--- a/arch/arm64/boot/dts/apple/t8122.dtsi
++++ b/arch/arm64/boot/dts/apple/t8122.dtsi
+@@ -1376,6 +1376,21 @@ atcphy0: phy@703000000 {
+ 			power-domains = <&ps_atc0_usb>;
+ 		};
+ 
++		/*
++		 * The J613 ADT has atc0-dpxbar and atc1-dpxbar with compatible
++		 * "atc-dpxbar,t602x", so these use the T6020 programming
++		 * model. Enabled by the boards that route a display through
++		 * them.
++		 */
++		atcphy0_xbar: mux@70304c000 {
++			compatible = "apple,t8122-display-crossbar",
++				     "apple,t6020-display-crossbar";
++			reg = <0x7 0x0304c000 0x0 0x4000>;
++			#mux-control-cells = <1>;
++			power-domains = <&ps_atc0_usb>;
++			status = "disabled";
++		};
++
+ 		dwc3_1: usb@b02280000 {
+ 			compatible = "apple,t8122-dwc3", "apple,t8103-dwc3";
+ 			reg = <0xb 0x02280000 0x0 0xcd00>, <0xb 0x0228cd00 0x0 0x3200>;
+@@ -1428,6 +1443,15 @@ atcphy1: phy@b03000000 {
+ 			mode-switch;
+ 			power-domains = <&ps_atc1_usb>;
+ 		};
++
++		atcphy1_xbar: mux@b0304c000 {
++			compatible = "apple,t8122-display-crossbar",
++				     "apple,t6020-display-crossbar";
++			reg = <0xb 0x0304c000 0x0 0x4000>;
++			#mux-control-cells = <1>;
++			power-domains = <&ps_atc1_usb>;
++			status = "disabled";
++		};
+ 	};
+ };
+ 
+-- 
+2.56.0
+

@@ -1,0 +1,117 @@
+commit f938551a391c35d93c12f8cb48eb7ffd88746a7d
+Author: Marius Gehrmann <marius@gehrmann.solutions>
+Date:   Mon Oct 12 21:15:22 2026 +0200
+
+    arm64: dts: apple: t8122-j613: Wire dcpext to the left-front USB-C port too
+    
+    Give dcpext a second Type-C display route, to the left-front port
+    (typec1, ATC1): ATC1's DP PHY and display crossbar as typec1, the same
+    crossbar state as the left-back port (2, dispext1,0: one display pipe
+    behind either ATC's crossbar), DPTX target 1 (the ADT's DFP index of
+    atc1, as in the M1/M2 dcpext routes), and port@3 on the front connector.
+    Enable ATC1's crossbar and keep ATC1's common power state on, as for
+    ATC0.
+    
+    route@1 stays disabled like route@0; the display gate enables every
+    route of the dcpext together with it. dcpext has one DPTX link, so one
+    external display at a time: the display fabric gives the pipeline to the
+    first port that asks, and a DP partner on the other port gets USB only.
+    
+    Tested on J613 with the same route added at boot by the display gate
+    instead of the device tree (identical properties): picture, hotplug and
+    DPMS on the front port, USB on the other port in both arrangements.
+    
+    Assisted-by: Claude:claude-opus-5-5
+    Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+    Claude-Session: https://claude.ai/code/session_017YMqWu7A3VwEYtHaA1TusK
+
+diff --git a/arch/arm64/boot/dts/apple/t8122-j613.dts b/arch/arm64/boot/dts/apple/t8122-j613.dts
+index fa16e3f6a..4dda28adc 100644
+--- a/arch/arm64/boot/dts/apple/t8122-j613.dts
++++ b/arch/arm64/boot/dts/apple/t8122-j613.dts
+@@ -252,10 +252,13 @@ &mesa {
+ #include "hwmon-laptop.dtsi"
+ 
+ /*
+- * External display on the left-back USB-C port (typec0, ATC0). In the J613
+- * ADT dcpext is display-crossbar ufp1, port 0, which is crossbar state 2
+- * (dispext1,0) in the T602x model, and ATC0's DisplayPort transmitter is
+- * dptx-phy 0. The right port (ATC1) is not described: it is untested.
++ * External display on both USB-C ports: left-back (typec0, ATC0) and
++ * left-front (typec1, ATC1). In the J613 ADT dcpext is display-crossbar
++ * ufp1, port 0, which is crossbar state 2 (dispext1,0) in the T602x model,
++ * on either ATC's crossbar. The DPTX target is the ADT's DFP index of the
++ * ATC (atc0 = 0, atc1 = 1), as in the M1/M2 dcpext routes. dcpext has one
++ * DPTX link, so one external display at a time: the display fabric gives
++ * the pipeline to the first port that asks, and the other port keeps USB.
+  *
+  * dcpext itself stays disabled here, like the internal DCP. The boot loader
+  * finds it through the "dcpext" alias, reserves its firmware and marks it
+@@ -293,14 +296,18 @@ &atcphy0_xbar {
+ 	status = "okay";
+ };
+ 
++&atcphy1_xbar {
++	status = "okay";
++};
++
+ &dcpext {
+ 	apple,connector-type = "USB-C";
+-	phys = <&atcphy0 PHY_TYPE_DP>;
+-	phy-names = "typec0";
+-	mux-controls = <&atcphy0_xbar 0>;
+-	mux-control-names = "typec0";
+-	apple,typec-mux-indices = <2>;
+-	apple,typec-dptx-phys = <0>;
++	phys = <&atcphy0 PHY_TYPE_DP>, <&atcphy1 PHY_TYPE_DP>;
++	phy-names = "typec0", "typec1";
++	mux-controls = <&atcphy0_xbar 0>, <&atcphy1_xbar 0>;
++	mux-control-names = "typec0", "typec1";
++	apple,typec-mux-indices = <2 2>;
++	apple,typec-dptx-phys = <0 1>;
+ 	/* RTKit quirks of AsahiLinux/linux#607 (syslog/ioreport acks, kdebug). */
+ 	apple,sync-syslog-ack;
+ 
+@@ -319,6 +326,18 @@ dcpext_typec0: endpoint {
+ 				};
+ 			};
+ 		};
++
++		route@1 {
++			reg = <1>;
++			mode-switch;
++			status = "disabled";
++
++			port {
++				dcpext_typec1: endpoint {
++					remote-endpoint = <&typec1_dcpext>;
++				};
++			};
++		};
+ 	};
+ };
+ 
+@@ -334,7 +353,23 @@ typec0_dcpext: endpoint {
+ 	};
+ };
+ 
++&typec1 {
++	ports {
++		port@3 {
++			reg = <3>;
++
++			typec1_dcpext: endpoint {
++				remote-endpoint = <&dcpext_typec1>;
++			};
++		};
++	};
++};
++
+ /* Needs to stay on for DisplayPort alternate mode across suspend, as on T8112. */
+ &ps_atc0_common {
+ 	apple,always-on;
+ };
++
++&ps_atc1_common {
++	apple,always-on;
++};

@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Fay (2026-10-13): desktop hint when a second external display has to wait.
+# The M3 MacBook Air drives one external display at a time. A second one stays
+# dark; switching works by unplugging the first one and plugging the waiting
+# one in again. The kernel says so ("... waits for an external display
+# pipeline ...", appledrm), older kernels only log the USB-C controller's -EBUSY.
+# Runs as the user service fay-display-busy-notify.service.
+set -uo pipefail
+
+last=0
+journalctl -k -f -n 0 -o cat | while IFS= read -r line; do
+  case $line in
+    *"waits for an external display pipeline"*)
+      port=${line#*display on }
+      port=${port%% waits*}
+      ;;
+    *"sn201202x"*"failed to configure Type-C connection: -16"*)
+      port=""
+      ;;
+    *) continue ;;
+  esac
+  # the kernel line and the controller's -EBUSY come together: one hint per plug
+  now=$(date +%s)
+  (( now - last < 20 )) && continue
+  last=$now
+  omarchy-notification-send -g 󰍹 -u normal \
+    "Nur ein externer Monitor gleichzeitig" \
+    "${port:+$port: }Dieser Monitor bleibt aus, solange der andere angeschlossen ist. Zum Wechseln den anderen abziehen und diesen neu einstecken." \
+    >/dev/null 2>&1 || true
+done

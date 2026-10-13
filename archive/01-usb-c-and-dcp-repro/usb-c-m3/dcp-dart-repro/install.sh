@@ -25,7 +25,7 @@ set -Eeuo pipefail
 export LC_ALL=C
 
 KIT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-BUILD=${FAY_BUILD:-/home/mg/.cache/fay-build/wip}
+BUILD=${FAY_BUILD:-~/.cache/fay-build/wip}
 KREL=7.2.2-fay-dcp
 DAILY_KREL=7.1.13-3-2-ARCH
 STATE=/var/lib/fay-dcptest

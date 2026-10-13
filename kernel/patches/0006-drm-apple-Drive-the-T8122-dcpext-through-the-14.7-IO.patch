@@ -1,0 +1,584 @@
+From a3ac376d44f0b7a57186f826598dd6b59295db59 Mon Sep 17 00:00:00 2001
+From: Marius Gehrmann <marius@gehrmann.solutions>
+Date: Tue, 13 Oct 2026 12:13:26 +0200
+Subject: [PATCH 06/12] drm: apple: Drive the T8122 dcpext through the 14.7
+ IOMFB template
+
+Aurora accepts 14.7 firmware only for processors that the boot loader
+hands over (T6030, the J613 panel) and drives them through its DCPLink
+session. The T8122 dcpext is not handed over: Linux starts it, as on
+M1/M2. asahi-wip-7.2 with AsahiLinux/linux#607 drives this dcpext with
+14.7 firmware through the classic IOMFB template.
+
+Add that path, for apple,t8122-dcpext only:
+- iomfb_v14_7_tpl.c: the asahi-wip-7.2 14.7 method and callback tables
+  around the shared template (symbols *_v14_7_0, no clash with Aurora's
+  iomfb_v14_7_*);
+- DCP_FIRMWARE_V_14_7_TEMPLATE, selected by dcp_check_firmware_version()
+  for apple,t8122-dcpext with firmware-compat 14.7.0, and dispatched like
+  12.3/13.5 (component bind, RTKit boot, dcp_start endpoints, template
+  modeset/flush/power), so that every path that tests
+  DCP_FIRMWARE_V_14_7 (the DCPLink session, T6030) is left alone;
+- dcp_fw_is_14_7() for the firmware protocol of the AFK, DPTX and DPAV
+  endpoints, which both paths share; external backlight levels stay off
+  on 14.7 either way;
+- the plane id as surface id in swaps, as asahi-wip-7.2 does for 14.7;
+- an apple,t8122-dcpext match entry (2 DPTX ports, as generic dcpext);
+- AFK: after START_ENDPOINT give the firmware 10 ms to set the endpoint
+  up, and poll the mailbox while waiting for the init acknowledgment,
+  because the ASC of a freshly booted processor can leave messages
+  queued without another recv-not-empty interrupt.
+
+The internal panel (apple,t8122-dcp, DCP_FIRMWARE_V_14_7) and every
+other processor are unchanged.
+
+Link: https://github.com/AsahiLinux/linux/pull/607
+Assisted-by: Claude:claude-opus-5-5
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_017YMqWu7A3VwEYtHaA1TusK
+Signed-off-by: Marius Gehrmann <marius@gehrmann.solutions>
+---
+ drivers/gpu/drm/apple/Makefile          |   1 +
+ drivers/gpu/drm/apple/afk.c             |  43 +++++++-
+ drivers/gpu/drm/apple/dcp-internal.h    |  21 ++++
+ drivers/gpu/drm/apple/dcp.c             |  26 +++++
+ drivers/gpu/drm/apple/dptxep.c          |   6 +-
+ drivers/gpu/drm/apple/epic/dpavservep.c |   2 +-
+ drivers/gpu/drm/apple/iomfb.c           |  14 ++-
+ drivers/gpu/drm/apple/iomfb_template.c  |   5 +
+ drivers/gpu/drm/apple/iomfb_v12_3.c     |   1 +
+ drivers/gpu/drm/apple/iomfb_v13_3.c     |   1 +
+ drivers/gpu/drm/apple/iomfb_v14_7_tpl.c | 125 ++++++++++++++++++++++++
+ drivers/gpu/drm/apple/iomfb_v14_7_tpl.h |  24 +++++
+ 12 files changed, 261 insertions(+), 8 deletions(-)
+ create mode 100644 drivers/gpu/drm/apple/iomfb_v14_7_tpl.c
+ create mode 100644 drivers/gpu/drm/apple/iomfb_v14_7_tpl.h
+
+diff --git a/drivers/gpu/drm/apple/Makefile b/drivers/gpu/drm/apple/Makefile
+index ffdb85cc0..10ccc2024 100644
+--- a/drivers/gpu/drm/apple/Makefile
++++ b/drivers/gpu/drm/apple/Makefile
+@@ -13,6 +13,7 @@ appledrm-y += dcpext_scanout.o
+ appledrm-y += dcpext_drm.o
+ appledrm-y += iomfb_v12_3.o
+ appledrm-y += iomfb_v13_3.o
++appledrm-y += iomfb_v14_7_tpl.o
+ appledrm-y += iomfb_v14_7.o iomfb_v14_7_link.o
+ appledrm-y += iomfb_v26_6.o iomfb_v26_6_link.o
+ appledrm-y += epic/dpavservep.o
+diff --git a/drivers/gpu/drm/apple/afk.c b/drivers/gpu/drm/apple/afk.c
+index a01a991a2..a7788c9dd 100644
+--- a/drivers/gpu/drm/apple/afk.c
++++ b/drivers/gpu/drm/apple/afk.c
+@@ -3,7 +3,9 @@
+ 
+ #include <linux/bitfield.h>
+ #include <linux/debugfs.h>
++#include <linux/delay.h>
+ #include <linux/dma-mapping.h>
++#include <linux/jiffies.h>
+ #include <linux/kconfig.h>
+ #include <linux/of_platform.h>
+ #include <linux/slab.h>
+@@ -112,6 +114,39 @@ void afk_shutdown(struct apple_dcp_afkep *afkep)
+ 	}
+ }
+ 
++/*
++ * A processor that Linux starts itself with 14.7 firmware (the T8122
++ * dcpext): as in AsahiLinux/linux#607, give the firmware time to set up
++ * the endpoint after START_ENDPOINT, and poll the mailbox while waiting,
++ * because its ASCWrap can leave messages queued without another
++ * recv-not-empty interrupt after RTKit bootstrap.
++ */
++static int afk_start_polled(struct apple_dcp_afkep *ep)
++{
++	unsigned long timeout;
++	int ret;
++
++	usleep_range(10000, 11000);
++	afk_send(ep, FIELD_PREP(RBEP_TYPE, RBEP_INIT));
++
++	timeout = jiffies + msecs_to_jiffies(1000);
++	do {
++		ret = apple_rtkit_poll(ep->dcp->rtk);
++		if (ret < 0)
++			return ret;
++
++		ret = wait_for_completion_timeout(&ep->started,
++						  msecs_to_jiffies(10));
++		if (ret > 0)
++			return 0;
++	} while (time_before(jiffies, timeout));
++
++	dev_err(ep->dcp->dev,
++		"RTKit AFK endpoint %02x did not acknowledge init\n",
++		ep->endpoint);
++	return -ETIMEDOUT;
++}
++
+ int afk_start(struct apple_dcp_afkep *ep)
+ {
+ 	int ret;
+@@ -120,6 +155,8 @@ int afk_start(struct apple_dcp_afkep *ep)
+ 	ret = apple_rtkit_start_ep(ep->dcp->rtk, ep->endpoint);
+ 	if (ret)
+ 		return ret;
++	if (ep->dcp->fw_compat == DCP_FIRMWARE_V_14_7_TEMPLATE)
++		return afk_start_polled(ep);
+ 	afk_send(ep, FIELD_PREP(RBEP_TYPE, RBEP_INIT));
+ 
+ 	ret = wait_for_completion_timeout(&ep->started, msecs_to_jiffies(1000));
+@@ -500,7 +537,7 @@ static void afk_recv_handle_std_service(struct apple_dcp_afkep *ep, u32 channel,
+ 	 * service teardown. Use the normal result path to release late-ack DMA
+ 	 * and command slots with their original allocation lengths.
+ 	 */
+-	if (ep->dcp->fw_compat == DCP_FIRMWARE_V_14_7 &&
++	if (dcp_fw_is_14_7(ep->dcp) &&
+ 	    eshdr->category == EPIC_CAT_REPLY && payload_size >= 4 &&
+ 	    payload_size < sizeof(struct epic_cmd)) {
+ 		struct epic_cmd cmd = {};
+@@ -643,7 +680,7 @@ static void afk_recv_handle(struct apple_dcp_afkep *ep, u32 channel, u32 type,
+ 	 */
+ 	if ((type == EPIC_TYPE_REPLY ||
+ 	     (type == EPIC_TYPE_NOTIFY &&
+-	      ep->dcp->fw_compat == DCP_FIRMWARE_V_14_7)) &&
++	      dcp_fw_is_14_7(ep->dcp))) &&
+ 	    eshdr->category == EPIC_CAT_REPLY &&
+ 	    payload_size >= sizeof(struct epic_cmd))
+ 		return afk_recv_handle_reply(ep, channel,
+@@ -765,7 +802,7 @@ static void afk_receive_message_worker(struct work_struct *work_)
+ 
+ 	case RBEP_START_ACK:
+ 		/* 14.7 can queue messages before it acknowledges the start. */
+-		if (work->ep->dcp->fw_compat == DCP_FIRMWARE_V_14_7)
++		if (dcp_fw_is_14_7(work->ep->dcp))
+ 			while (afk_recv(work->ep))
+ 				;
+ 		complete_all(&work->ep->started);
+diff --git a/drivers/gpu/drm/apple/dcp-internal.h b/drivers/gpu/drm/apple/dcp-internal.h
+index eec54f326..d36c54d7a 100644
+--- a/drivers/gpu/drm/apple/dcp-internal.h
++++ b/drivers/gpu/drm/apple/dcp-internal.h
+@@ -23,6 +23,7 @@
+ #include "iomfb_v12_3.h"
+ #include "iomfb_v13_3.h"
+ #include "iomfb_v14_7.h"
++#include "iomfb_v14_7_tpl.h"
+ #include "iomfb_v26_6.h"
+ #include "epic/dpavservep.h"
+ 
+@@ -43,6 +44,13 @@ enum dcp_firmware_version {
+ 	DCP_FIRMWARE_V_13_5,
+ 	DCP_FIRMWARE_V_14_7,
+ 	DCP_FIRMWARE_V_26_6,
++	/*
++	 * 14.7 firmware on a processor that Linux starts itself and drives
++	 * through the classic IOMFB template (iomfb_v14_7_tpl.c), as M1/M2
++	 * external processors: the T8122 dcpext. Its AFK, DPTX and DPAV
++	 * endpoints speak the 14.7 protocol (dcp_fw_is_14_7()).
++	 */
++	DCP_FIRMWARE_V_14_7_TEMPLATE,
+ };
+ 
+ enum {
+@@ -235,6 +243,7 @@ struct apple_dcp {
+ 	union {
+ 		struct dcp_swap_submit_req_v12_3 v12_3;
+ 		struct dcp_swap_submit_req_v13_3 v13_3;
++		struct dcp_swap_submit_req_v14_7_0 v14_7_0;
+ 	} swap;
+ 
+ 	/* swap id of the last completed swap */
+@@ -423,6 +432,18 @@ int dcp_backlight_update(struct apple_dcp *dcp);
+ s32 dcp_ext_backlight_value(struct apple_dcp *dcp);
+ bool dcp_has_panel(struct apple_dcp *dcp);
+ 
++/*
++ * Does @dcp run 14.7 firmware, whichever IOMFB path drives it? For the
++ * firmware protocol of the AFK, DPTX and DPAV endpoints. The IOMFB path
++ * itself is chosen by fw_compat: DCP_FIRMWARE_V_14_7 is Aurora's DCPLink
++ * session, DCP_FIRMWARE_V_14_7_TEMPLATE the classic IOMFB template.
++ */
++static inline bool dcp_fw_is_14_7(const struct apple_dcp *dcp)
++{
++	return dcp->fw_compat == DCP_FIRMWARE_V_14_7 ||
++	       dcp->fw_compat == DCP_FIRMWARE_V_14_7_TEMPLATE;
++}
++
+ #define DCP_AUDIO_MAX_CHANS 15
+ 
+ #endif /* __APPLE_DCP_INTERNAL_H__ */
+diff --git a/drivers/gpu/drm/apple/dcp.c b/drivers/gpu/drm/apple/dcp.c
+index 09ae94408..949003448 100644
+--- a/drivers/gpu/drm/apple/dcp.c
++++ b/drivers/gpu/drm/apple/dcp.c
+@@ -1387,6 +1387,9 @@ static void _dcp_poweroff(struct apple_dcp *dcp)
+ 	case DCP_FIRMWARE_V_13_5:
+ 		iomfb_poweroff_v13_3(dcp);
+ 		break;
++	case DCP_FIRMWARE_V_14_7_TEMPLATE:
++		iomfb_poweroff_v14_7_0(dcp);
++		break;
+ 	case DCP_FIRMWARE_V_26_6:
+ 		iomfb_v26_6_poweroff(dcp);
+ 		break;
+@@ -1472,6 +1475,9 @@ static void __maybe_unused dcp_sleep(struct apple_dcp *dcp)
+ 	case DCP_FIRMWARE_V_13_5:
+ 		iomfb_sleep_v13_3(dcp);
+ 		break;
++	case DCP_FIRMWARE_V_14_7_TEMPLATE:
++		iomfb_sleep_v14_7_0(dcp);
++		break;
+ 	case DCP_FIRMWARE_V_26_6:
+ 		iomfb_v26_6_poweroff(dcp);
+ 		break;
+@@ -1552,6 +1558,9 @@ void dcp_poweron(struct platform_device *pdev)
+ 	case DCP_FIRMWARE_V_13_5:
+ 		iomfb_poweron_v13_3(dcp);
+ 		break;
++	case DCP_FIRMWARE_V_14_7_TEMPLATE:
++		iomfb_poweron_v14_7_0(dcp);
++		break;
+ 	case DCP_FIRMWARE_V_26_6:
+ 		iomfb_v26_6_poweron(dcp);
+ 		break;
+@@ -1904,6 +1913,18 @@ static enum dcp_firmware_version dcp_check_firmware_version(struct device *dev)
+ 		return DCP_FIRMWARE_UNKNOWN;
+ 	}
+ 
++	/*
++	 * The T8122 external processor: Linux starts it and drives 14.7
++	 * firmware through the classic IOMFB template, as on M1/M2.
++	 */
++	if (of_device_is_compatible(dev->of_node, "apple,t8122-dcpext")) {
++		if (!strcmp(compat_str, "14.7.0"))
++			return DCP_FIRMWARE_V_14_7_TEMPLATE;
++		dev_err(dev, "T8122 external display not started: DCP firmware-compat %s is not 14.7.0\n",
++			compat_str);
++		return DCP_FIRMWARE_UNKNOWN;
++	}
++
+ 	/* The T6030 external processors: the 14.x firmware IOMFB only. */
+ 	if (of_device_is_compatible(dev->of_node, "apple,t6030-dcpext")) {
+ 		if (!strcmp(compat_str, "14.7.0"))
+@@ -2792,6 +2813,10 @@ static const struct apple_dcp_hw_data apple_dcp_hw_t6030_dcpext = {
+ 	.num_dptx_ports = 1,
+ };
+ 
++static const struct apple_dcp_hw_data apple_dcp_hw_t8122_dcpext = {
++	.num_dptx_ports = 2,
++};
++
+ static const struct apple_dcp_hw_data apple_dcp_hw_dcpext = {
+ 	.num_dptx_ports = 2,
+ };
+@@ -2803,6 +2828,7 @@ static const struct of_device_id of_match[] = {
+ 	{ .compatible = "apple,t6030-dcp", .data = &apple_dcp_hw_t6030, },
+ 	{ .compatible = "apple,t6030-dcpext", .data = &apple_dcp_hw_t6030_dcpext, },
+ 	{ .compatible = "apple,t8122-dcp", .data = &apple_dcp_hw_t8122, },
++	{ .compatible = "apple,t8122-dcpext", .data = &apple_dcp_hw_t8122_dcpext, },
+ 	{ .compatible = "apple,dcp",       .data = &apple_dcp_hw_dcp,    },
+ 	{ .compatible = "apple,dcpext",    .data = &apple_dcp_hw_dcpext, },
+ 	{}
+diff --git a/drivers/gpu/drm/apple/dptxep.c b/drivers/gpu/drm/apple/dptxep.c
+index 538077f8b..b11e86604 100644
+--- a/drivers/gpu/drm/apple/dptxep.c
++++ b/drivers/gpu/drm/apple/dptxep.c
+@@ -870,7 +870,7 @@ static int dptxport_call(struct apple_epic_service *service, u32 idx,
+ static void dptxport_init(struct apple_epic_service *service, const char *name,
+ 			  const char *class, s64 unit)
+ {
+-	bool v14_7 = service->ep->dcp->fw_compat == DCP_FIRMWARE_V_14_7;
++	bool v14_7 = dcp_fw_is_14_7(service->ep->dcp);
+ 
+ 	if (!name)
+ 		return;
+@@ -949,7 +949,7 @@ int dptxep_init(struct apple_dcp *dcp)
+ 	init_completion(&dcp->dptxport[1].linkcfg_completion);
+ 
+ 	dcp->dptxep = afk_init(dcp, DPTX_ENDPOINT,
+-			       dcp->fw_compat == DCP_FIRMWARE_V_14_7 ?
++			       dcp_fw_is_14_7(dcp) ?
+ 			       dptxep_v14_7_ops : dptxep_ops);
+ 	if (IS_ERR(dcp->dptxep))
+ 		return PTR_ERR(dcp->dptxep);
+@@ -968,7 +968,7 @@ int dptxep_init(struct apple_dcp *dcp)
+ 			 * kIOReturnNoDevice (0xe00002c0). Leave the endpoint
+ 			 * up so a later announce can still bind.
+ 			 */
+-			if (dcp->fw_compat == DCP_FIRMWARE_V_14_7) {
++			if (dcp_fw_is_14_7(dcp)) {
+ 				dev_info(dcp->dev,
+ 					 "DPTX port %u not announced yet\n", port);
+ 				return 0;
+diff --git a/drivers/gpu/drm/apple/epic/dpavservep.c b/drivers/gpu/drm/apple/epic/dpavservep.c
+index 507433bde..243fbdfe2 100644
+--- a/drivers/gpu/drm/apple/epic/dpavservep.c
++++ b/drivers/gpu/drm/apple/epic/dpavservep.c
+@@ -215,7 +215,7 @@ const struct drm_edid *dcpavserv_copy_edid(struct apple_dcp *dcp)
+ 	 * The 14.7 firmware of an external processor answers EDID requests
+ 	 * once its service has been opened; open each announced instance once.
+ 	 */
+-	if (dcp->fw_compat == DCP_FIRMWARE_V_14_7 &&
++	if (dcp_fw_is_14_7(dcp) &&
+ 	    READ_ONCE(dcp->dcpavserv.opened) != service) {
+ 		int ret = afk_service_call(service, 4, 6, NULL, 0, 32, NULL, 0, 32);
+ 
+diff --git a/drivers/gpu/drm/apple/iomfb.c b/drivers/gpu/drm/apple/iomfb.c
+index 6554db359..40f410828 100644
+--- a/drivers/gpu/drm/apple/iomfb.c
++++ b/drivers/gpu/drm/apple/iomfb.c
+@@ -628,7 +628,7 @@ int dcp_attributes_replace(struct apple_dcp *dcp, struct dcp_parse_ctx *handle,
+ 	schedule_work(&dcp->dimensions_wq);
+ 	/* 14.7 swaps carry no external backlight level. */
+ 	ext = backlight_control && !dcp_has_panel(dcp) &&
+-	      dcp->fw_compat != DCP_FIRMWARE_V_14_7;
++	      !dcp_fw_is_14_7(dcp);
+ 	if (ext != READ_ONCE(dcp->ext_backlight)) {
+ 		WRITE_ONCE(dcp->ext_backlight, ext);
+ 		if (dcp->connector)
+@@ -821,6 +821,9 @@ int dcp_crtc_atomic_modeset(struct drm_crtc *crtc,
+ 	case DCP_FIRMWARE_V_14_7:
+ 		ret = iomfb_v14_7_modeset(dcp, crtc_state);
+ 		break;
++	case DCP_FIRMWARE_V_14_7_TEMPLATE:
++		ret = iomfb_modeset_v14_7_0(dcp, crtc_state);
++		break;
+ 	default:
+ 		WARN_ONCE(true, "Unexpected firmware version: %u\n",
+ 			  dcp->fw_compat);
+@@ -973,6 +976,9 @@ void dcp_flush(struct drm_crtc *crtc, struct drm_atomic_state *state)
+ 	case DCP_FIRMWARE_V_13_5:
+ 		iomfb_flush_v13_3(dcp, crtc, state);
+ 		break;
++	case DCP_FIRMWARE_V_14_7_TEMPLATE:
++		iomfb_flush_v14_7_0(dcp, crtc, state);
++		break;
+ 	default:
+ 		WARN_ONCE(true, "Unexpected firmware version: %u\n", dcp->fw_compat);
+ 		break;
+@@ -988,6 +994,9 @@ static void iomfb_start(struct apple_dcp *dcp)
+ 	case DCP_FIRMWARE_V_13_5:
+ 		iomfb_start_v13_3(dcp);
+ 		break;
++	case DCP_FIRMWARE_V_14_7_TEMPLATE:
++		iomfb_start_v14_7_0(dcp);
++		break;
+ 	default:
+ 		WARN_ONCE(true, "Unexpected firmware version: %u\n", dcp->fw_compat);
+ 		break;
+@@ -1043,6 +1052,9 @@ void iomfb_shutdown(struct apple_dcp *dcp)
+ 	case DCP_FIRMWARE_V_13_5:
+ 		iomfb_shutdown_v13_3(dcp);
+ 		break;
++	case DCP_FIRMWARE_V_14_7_TEMPLATE:
++		iomfb_shutdown_v14_7_0(dcp);
++		break;
+ 	default:
+ 		WARN_ONCE(true, "Unexpected firmware version: %u\n", dcp->fw_compat);
+ 		break;
+diff --git a/drivers/gpu/drm/apple/iomfb_template.c b/drivers/gpu/drm/apple/iomfb_template.c
+index 08e88fe72..2e094c18d 100644
+--- a/drivers/gpu/drm/apple/iomfb_template.c
++++ b/drivers/gpu/drm/apple/iomfb_template.c
+@@ -1490,6 +1490,11 @@ void DCP_FW_NAME(iomfb_flush)(struct apple_dcp *dcp, struct drm_crtc *crtc, stru
+ 		req->swap.src_rect[l] = apple_state->src_rect;
+ 		req->swap.dst_rect[l] = apple_state->dst_rect;
+ 
++#if DCP_FW_VER >= DCP_FW_VERSION(14, 7, 0)
++		/* As asahi-wip-7.2 does, which drives 14.7 dcpext this way. */
++		req->swap.surf_ids[l] = plane->base.id;
++#endif
++
+ 		if (dcp->notch_height > 0)
+ 			req->swap.dst_rect[l].y += dcp->notch_height;
+ 
+diff --git a/drivers/gpu/drm/apple/iomfb_v12_3.c b/drivers/gpu/drm/apple/iomfb_v12_3.c
+index 0fe08c42d..092a38785 100644
+--- a/drivers/gpu/drm/apple/iomfb_v12_3.c
++++ b/drivers/gpu/drm/apple/iomfb_v12_3.c
+@@ -3,6 +3,7 @@
+ 
+ #include "iomfb_v12_3.h"
+ #include "iomfb_v13_3.h"
++#include "iomfb_v14_7_tpl.h"
+ #include "version_utils.h"
+ 
+ static const struct dcp_method_entry dcp_methods[dcpep_num_methods] = {
+diff --git a/drivers/gpu/drm/apple/iomfb_v13_3.c b/drivers/gpu/drm/apple/iomfb_v13_3.c
+index 0ac869d24..056240585 100644
+--- a/drivers/gpu/drm/apple/iomfb_v13_3.c
++++ b/drivers/gpu/drm/apple/iomfb_v13_3.c
+@@ -3,6 +3,7 @@
+ 
+ #include "iomfb_v12_3.h"
+ #include "iomfb_v13_3.h"
++#include "iomfb_v14_7_tpl.h"
+ #include "version_utils.h"
+ 
+ static const struct dcp_method_entry dcp_methods[dcpep_num_methods] = {
+diff --git a/drivers/gpu/drm/apple/iomfb_v14_7_tpl.c b/drivers/gpu/drm/apple/iomfb_v14_7_tpl.c
+new file mode 100644
+index 000000000..f59c016cd
+--- /dev/null
++++ b/drivers/gpu/drm/apple/iomfb_v14_7_tpl.c
+@@ -0,0 +1,125 @@
++// SPDX-License-Identifier: GPL-2.0-only OR MIT
++/* Copyright The Asahi Linux Contributors */
++
++/*
++ * 14.7 firmware through the classic IOMFB template: the method and
++ * callback tables of asahi-wip-7.2 (AsahiLinux/linux#607), used for the
++ * T8122 dcpext (DCP_FIRMWARE_V_14_7_TEMPLATE).
++ */
++
++/* Include all per-version headers before defining DCP_FW ourself. */
++#include "iomfb_v12_3.h"
++#include "iomfb_v13_3.h"
++#include "iomfb_v14_7_tpl.h"
++#include "version_utils.h"
++
++static const struct dcp_method_entry dcp_methods[dcpep_num_methods] = {
++	IOMFB_METHOD("A000", dcpep_late_init_signal),
++	IOMFB_METHOD("A029", dcpep_setup_video_limits),
++	IOMFB_METHOD("A131", iomfbep_a131_pmu_service_matched),
++	IOMFB_METHOD("A132", iomfbep_a132_backlight_service_matched),
++	IOMFB_METHOD("A377", dcpep_set_create_dfb),
++	IOMFB_METHOD("A378", iomfbep_a358_vi_set_temperature_hint),
++	IOMFB_METHOD("A401", dcpep_start_signal),
++	IOMFB_METHOD("A406", dcpep_swap_start),
++	IOMFB_METHOD("A407", dcpep_swap_submit),
++	IOMFB_METHOD("A409", dcpep_set_display_device),
++	IOMFB_METHOD("A410", dcpep_is_main_display),
++	IOMFB_METHOD("A411", dcpep_set_digital_out_mode),
++	IOMFB_METHOD("A421", iomfbep_set_matrix),
++	IOMFB_METHOD("A425", iomfbep_get_color_remap_mode),
++	IOMFB_METHOD("A440", dcpep_set_parameter_dcp),
++	IOMFB_METHOD("A444", dcpep_create_default_fb),
++	IOMFB_METHOD("A443", dcpep_enable_disable_video_power_savings),
++	IOMFB_METHOD("A455", dcpep_first_client_open),
++	IOMFB_METHOD("A457", iomfbep_last_client_close),
++	IOMFB_METHOD("A463", dcpep_set_display_refresh_properties),
++	IOMFB_METHOD("A466", dcpep_flush_supports_power),
++	IOMFB_METHOD("A467", iomfbep_abort_swaps_dcp),
++	//IOMFB_METHOD("A471", dcpep_update_dfb_surface),
++	IOMFB_METHOD("A472", dcpep_set_power_state),
++};
++
++#define DCP_FW v14_7_0
++#define DCP_FW_VER DCP_FW_VERSION(14, 7, 0)
++
++#include "iomfb_template.c"
++
++static const iomfb_cb_handler cb_handlers[IOMFB_MAX_CB] = {
++	[0] = trampoline_true, /* did_boot_signal */
++	[1] = trampoline_true, /* did_power_on_signal */
++	[2] = trampoline_nop, /* will_power_off_signal */
++	[3] = trampoline_rt_bandwidth,
++	// [6] = trampoline_set_frame_sync_props,
++	[6] = trampoline_nop,
++	[100] = iomfbep_cb_match_pmu_service,
++	[101] = trampoline_zero, /* get_display_default_stride */
++	[102] = trampoline_nop, /* set_number_property */
++	[103] = trampoline_nop, /* trigger_user_cal_loader */
++	[104] = trampoline_nop, /* set_boolean_property */
++	[107] = trampoline_nop, /* remove_property */
++	[108] = trampoline_true, /* create_provider_service */
++	[109] = trampoline_true, /* create_product_service */
++	[110] = trampoline_true, /* create_pmu_service */
++	[111] = trampoline_true, /* create_iomfb_service */
++	[112] = trampoline_create_backlight_service,
++	[113] = trampoline_true, /* create_nvram_service? */
++	[115] = trampoline_get_tiling_state,
++	[116] = trampoline_false, /* set_tiling_state */
++	[121] = dcpep_cb_boot_1, /* is_dark_boot */
++	[122] = trampoline_false, /* is_dark_boot / is_waking_from_hibernate*/
++	[123] = trampoline_false,
++	[125] = trampoline_read_edt_data,
++	[127] = trampoline_prop_start,
++	[128] = trampoline_prop_chunk,
++	[129] = trampoline_prop_end,
++	// [129] = trampoline_allocate_bandwidth,
++	[201] = trampoline_map_piodma,
++	[202] = trampoline_unmap_piodma,
++	[206] = iomfbep_cb_match_pmu_service_2,
++	[207] = iomfbep_cb_match_backlight_service,
++	[208] = trampoline_nop, /* update_backlight_factor_prop */
++	[209] = trampoline_get_time,
++	[300] = trampoline_pr_publish,
++	[401] = trampoline_get_uint_prop,
++	[404] = trampoline_nop, /* sr_set_uint_prop */
++	[406] = trampoline_set_fx_prop,
++	[408] = trampoline_get_frequency,
++	[411] = trampoline_map_reg,
++	[413] = trampoline_true, /* sr_set_property_dict */
++	[414] = trampoline_sr_set_property_int,
++	[415] = trampoline_true, /* sr_set_property_bool */
++	[451] = trampoline_allocate_buffer,
++	[452] = trampoline_map_physical,
++	[454] = trampoline_release_mem_desc,
++	[552] = trampoline_true, /* set_property_dict_0 */
++	[561] = trampoline_true, /* set_property_dict */
++	[563] = trampoline_true, /* set_property_int */
++	[565] = trampoline_true, /* set_property_bool */
++	[567] = trampoline_true, /* set_property_str */
++	[574] = trampoline_zero, /* power_up_dart */
++	[576] = trampoline_hotplug,
++	[577] = trampoline_nop, /* powerstate_notify */
++	//[582] = trampoline_create_dfb_surface, /* create_default_fb_surface */
++	[582] = trampoline_true,
++	[584] = trampoline_nop, /* IOMobileFramebufferAP::clear_default_surface */
++	[588] = trampoline_nop, /* resize_default_fb_surface_gated */
++	[589] = trampoline_swap_complete,
++	[591] = trampoline_swap_complete_intent_gated,
++	[592] = trampoline_abort_swap_ap_gated,
++	[593] = trampoline_enable_backlight_message_ap_gated,
++	[594] = trampoline_nop, /* IOMobileFramebufferAP::setSystemConsoleMode */
++	[596] = trampoline_false, /* IOMobileFramebufferAP::isDFBAllocated */
++	[597] = trampoline_false, /* IOMobileFramebufferAP::preserveContents */
++	[598] = trampoline_nop, /* find_swap_function_gated */
++};
++
++void DCP_FW_NAME(iomfb_start)(struct apple_dcp *dcp)
++{
++	dcp->cb_handlers = cb_handlers;
++
++	dcp_start_signal(dcp, false, dcp_started, NULL);
++}
++
++#undef DCP_FW_VER
++#undef DCP_FW
+diff --git a/drivers/gpu/drm/apple/iomfb_v14_7_tpl.h b/drivers/gpu/drm/apple/iomfb_v14_7_tpl.h
+new file mode 100644
+index 000000000..888ff9ef4
+--- /dev/null
++++ b/drivers/gpu/drm/apple/iomfb_v14_7_tpl.h
+@@ -0,0 +1,24 @@
++/* SPDX-License-Identifier: GPL-2.0-only OR MIT */
++/* Copyright The Asahi Linux Contributors */
++
++/*
++ * The classic IOMFB (dcpep) protocol of 14.7 firmware, from the shared
++ * IOMFB template, for display coprocessors that Linux starts itself (the
++ * T8122 dcpext). Not to be confused with iomfb_v14_7.h, Aurora's DCPLink
++ * session for 14.7 processors handed over by the boot loader.
++ */
++
++#ifndef __APPLE_IOMFB_V14_7_TPL_H__
++#define __APPLE_IOMFB_V14_7_TPL_H__
++
++#include "version_utils.h"
++
++#define DCP_FW v14_7_0
++#define DCP_FW_VER DCP_FW_VERSION(14, 7, 0)
++
++#include "iomfb_template.h"
++
++#undef DCP_FW_VER
++#undef DCP_FW
++
++#endif /* __APPLE_IOMFB_V14_7_TPL_H__ */
+-- 
+2.56.0
+

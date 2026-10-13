@@ -1,0 +1,42 @@
+--- drivers/gpu/drm/apple/dptxep.c	2026-10-11 19:39:06.513008999 +0200
++++ ~/.cache/fay-build/wip/drivers/gpu/drm/apple/dptxep.c	2026-10-11 14:56:26.968135253 +0200
+@@ -97,14 +97,28 @@
+ 	return 0;
+ }
+ 
++/* fay: experiment knobs for the DPTX connection target on t8122 dcpext */
++static int fay_dptx_core = -1;
++module_param(fay_dptx_core, int, 0644);
++MODULE_PARM_DESC(fay_dptx_core, "override DPTX connect core (-1 = driver default)");
++static int fay_dptx_unk;
++module_param(fay_dptx_unk, int, 0644);
++MODULE_PARM_DESC(fay_dptx_unk, "DPTX connect unk field (0 or 0x100)");
++
+ int dptxport_connect(struct apple_epic_service *service, u8 core, u8 atc,
+ 		     u8 die)
+ {
+ 	struct dptx_port *dptx = service->cookie;
+ 	struct dcpdptx_connection_cmd cmd, resp;
+-	u32 unk_field = 0x0; // seen as 0x100 under some conditions
++	u32 unk_field = fay_dptx_unk; // seen as 0x100 under some conditions
+ 	int ret;
+-	u32 target = FIELD_PREP(DCPDPTX_REMOTE_PORT_CORE, core) |
++	u32 target;
++
++	if (fay_dptx_core >= 0)
++		core = fay_dptx_core;
++	dev_info(service->ep->dcp->dev, "fay-dptx: connect core %u atc %u die %u unk 0x%x\n",
++		 core, atc, die, unk_field);
++	target = FIELD_PREP(DCPDPTX_REMOTE_PORT_CORE, core) |
+ 		     FIELD_PREP(DCPDPTX_REMOTE_PORT_ATC, atc) |
+ 		     FIELD_PREP(DCPDPTX_REMOTE_PORT_DIE, die) |
+ 		     DCPDPTX_REMOTE_PORT_CONNECTED;
+@@ -478,6 +492,8 @@
+ 	struct dptx_port *dptx = service->cookie;
+ 	const struct apple_dcp *dcp = service->ep->dcp;
+ 
++	dev_info(dcp->dev, "fay-dptx: firmware called activate\n");
++
+ 	// TODO: hack, use phy_set_mode to select the correct DCP(EXT) input
+ 	// for standalone phy (i.e. not atc phy).
+ 	if (!dcp->typec_mux)

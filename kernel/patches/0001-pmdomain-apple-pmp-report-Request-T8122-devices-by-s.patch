@@ -1,0 +1,354 @@
+From 234271efe0ba9510fc9d732dd499dffe2e68a040 Mon Sep 17 00:00:00 2001
+From: Marius Gehrmann <marius@gehrmann.solutions>
+Date: Mon, 12 Oct 2026 21:12:39 +0200
+Subject: [PATCH 01/12] pmdomain: apple: pmp-report: Request T8122 devices by
+ soc-device record
+
+The T8122 PMP firmware reads the PTD request word (SOC-DEV-PS-REQ) as one
+bit per record of its apple,tunable-soc-device table, in table order: bit
+N is record N. The report driver assumes that bit N names soc-device ID
+N + 1. That is the same thing on T6030, whose records are in ID order,
+but not on T8122. On J613 the table is ordered DCS, AMCC, IOA0, IOA1,
+SOC-AON, SOC-REST, EACC0, PACC0, AGX, ANE0, ISP, DISP, DISPEXT, ...,
+SCODEC, LTR, ANS, so DISP (ID 8) is record 11, DISPEXT (ID 9) record 12
+and ANS (ID 18) record 19.
+
+The seeded request 0x20080 (bits 7 and 17) therefore asks the PMP for
+PACC0 and SCODEC. The running firmware's own data shows exactly that: its
+active set is its always-on set plus the request bits taken as records.
+DISP is never active; its acknowledgment on bit 7 only appears because
+PACC0 is always on. With DISP inactive the PMP ignores the internal DCP's
+DISP_INT DVFS votes. The panel only needs the lowest state, so nothing
+shows, but a mode on the internal pipe that needs a higher state would
+wait for it forever. DISPEXT, which the external display processor needs,
+has the same problem and does wait forever: its firmware polls DVFS-STATE
+in its first modeset for a DISP_EXT state that the PMP never grants while
+DISPEXT is inactive.
+
+Let a report entry say that it is requested by soc-device record
+(apple,soc-device-record). Its reg stays the soc-device ID - 1, so entries
+keep their names and lookups by reg keep working; the driver looks up the
+record that holds that ID in the PMP's table and uses its index as the
+PTD request and acknowledge bit. An ID that is missing or appears twice,
+or a bit that two entries would share, refuses the PMP start. Record bits
+are checked against their record's acknowledge flag, the others by ID as
+before. Looking the ID up keeps this right on another T8122 board whose
+table is ordered differently.
+
+Mark the T8122 DISP entry, so DISP is requested on bit 11 on J613. The
+ANS entry stays on bit 17 (record 17, SCODEC on J613) for now: ANS is not
+acknowledged, and asking for ANS instead of SCODEC changes what the PMP
+does for storage, which has not been tested.
+
+An equivalent opt-in version was tested on J613 (MacBook Air M3, 14.7
+firmware): request 0x21800 (DISP and DISPEXT by record, ANS unchanged),
+acknowledged 0x218f0; panel, GPU and the external display work.
+
+Assisted-by: Claude:claude-opus-5-5
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_017YMqWu7A3VwEYtHaA1TusK
+Signed-off-by: Marius Gehrmann <marius@gehrmann.solutions>
+---
+ drivers/pmdomain/apple/pmp-report-test.c      | 32 +++++++++
+ .../pmdomain/apple/pmp-report-validation.h    | 50 ++++++++++++++
+ drivers/pmdomain/apple/pmp-report.c           | 69 +++++++++++++++++--
+ drivers/soc/apple/t8122-pmp.dtso              | 18 +++--
+ 4 files changed, 159 insertions(+), 10 deletions(-)
+
+diff --git a/drivers/pmdomain/apple/pmp-report-test.c b/drivers/pmdomain/apple/pmp-report-test.c
+index fbb08fdeb..52c185999 100644
+--- a/drivers/pmdomain/apple/pmp-report-test.c
++++ b/drivers/pmdomain/apple/pmp-report-test.c
+@@ -125,6 +125,37 @@ static void pmp_devices_reordered(struct kunit *test)
+ 	KUNIT_EXPECT_FALSE(test, apple_pmp_devices_valid(table, len, seed, seed, false));
+ }
+ 
++/* T8122 (J613): the PMP reads its request word by record, not by ID - 1. */
++static void pmp_records_t8122(struct kunit *test)
++{
++	static const u32 ids[] = {
++		1, 2, 19, 20, 16, 17, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 18,
++	};
++	const size_t len = ARRAY_SIZE(ids) * PMP_SOC_DEVICE_SIZE;
++	u64 seed = BIT_ULL(11) | BIT_ULL(12);
++	u8 *table = kunit_kzalloc(test, len, GFP_KERNEL);
++	unsigned int i;
++
++	KUNIT_ASSERT_NOT_NULL(test, table);
++	for (i = 0; i < ARRAY_SIZE(ids); i++) {
++		put_unaligned_le32(ids[i], table + i * PMP_SOC_DEVICE_SIZE);
++		if (ids[i] == 8 || ids[i] == 9)
++			put_unaligned_le32(0xa, table + i * PMP_SOC_DEVICE_SIZE + 8);
++	}
++	/* DISP (8), DISPEXT (9), ANS (18) */
++	KUNIT_EXPECT_EQ(test, apple_pmp_record_of_id(table, len, 8), 11);
++	KUNIT_EXPECT_EQ(test, apple_pmp_record_of_id(table, len, 9), 12);
++	KUNIT_EXPECT_EQ(test, apple_pmp_record_of_id(table, len, 18), 19);
++	KUNIT_EXPECT_EQ(test, apple_pmp_record_of_id(table, len, 21), -ENOENT);
++	KUNIT_EXPECT_EQ(test, apple_pmp_record_of_id(table, len, 0), -ENOENT);
++	KUNIT_EXPECT_EQ(test, apple_pmp_record_of_id(table, len - 1, 8), -ENOENT);
++	KUNIT_EXPECT_TRUE(test, apple_pmp_records_valid(table, len, seed, seed));
++	KUNIT_EXPECT_FALSE(test, apple_pmp_records_valid(table, len, seed, 0));
++	KUNIT_EXPECT_FALSE(test, apple_pmp_records_valid(table, len, BIT_ULL(20), 0));
++	put_unaligned_le32(8, table + 12 * PMP_SOC_DEVICE_SIZE);
++	KUNIT_EXPECT_EQ(test, apple_pmp_record_of_id(table, len, 8), -ENOENT);
++}
++
+ static void pmp_bootargs_valid_ids(struct kunit *test)
+ {
+ 	u8 args[32];
+@@ -172,6 +203,7 @@ static struct kunit_case apple_pmp_report_cases[] = {
+ 	KUNIT_CASE(pmp_ranges_reject_wrapped_base),
+ 	KUNIT_CASE(pmp_devices_seed_and_ack),
+ 	KUNIT_CASE(pmp_devices_reordered),
++	KUNIT_CASE(pmp_records_t8122),
+ 	KUNIT_CASE(pmp_bootargs_valid_ids),
+ 	KUNIT_CASE(pmp_bootargs_reject_truncation),
+ 	KUNIT_CASE(pmp_bootargs_reject_integer_width),
+diff --git a/drivers/pmdomain/apple/pmp-report-validation.h b/drivers/pmdomain/apple/pmp-report-validation.h
+index 5f60ff3ee..f629eecda 100644
+--- a/drivers/pmdomain/apple/pmp-report-validation.h
++++ b/drivers/pmdomain/apple/pmp-report-validation.h
+@@ -3,6 +3,7 @@
+ #define _APPLE_PMP_REPORT_VALIDATION_H
+ 
+ #include <linux/bitops.h>
++#include <linux/errno.h>
+ #include <linux/types.h>
+ #include <linux/unaligned.h>
+ 
+@@ -69,6 +70,55 @@ static inline bool apple_pmp_devices_valid(const u8 *table, size_t len,
+ 	return found == seed;
+ }
+ 
++/*
++ * The index of the soc-device record that holds device ID @id, or -ENOENT if
++ * no record or more than one does. A PMP that reads its request word by
++ * record (T8122) wants the bit of that index, not ID - 1.
++ */
++static inline int apple_pmp_record_of_id(const u8 *table, size_t len, u32 id)
++{
++	int found = -ENOENT;
++	size_t pos;
++
++	if (!table || !len || len % PMP_SOC_DEVICE_SIZE || !id)
++		return -ENOENT;
++	for (pos = 0; pos < len; pos += PMP_SOC_DEVICE_SIZE) {
++		if (get_unaligned_le32(table + pos) != id)
++			continue;
++		if (found >= 0)
++			return -ENOENT;
++		found = pos / PMP_SOC_DEVICE_SIZE;
++	}
++	return found;
++}
++
++/*
++ * Request bit N names soc-device record N. Each seeded record must exist and
++ * be acknowledged exactly when its flags say so.
++ */
++static inline bool apple_pmp_records_valid(const u8 *table, size_t len,
++					   u64 seed, u64 ack)
++{
++	u64 bits = seed;
++
++	if (!table || !len || len % PMP_SOC_DEVICE_SIZE || (ack & ~seed))
++		return false;
++	while (bits) {
++		unsigned int n = __ffs64(bits);
++		const u8 *dev;
++
++		bits &= bits - 1;
++		if ((size_t)(n + 1) * PMP_SOC_DEVICE_SIZE > len)
++			return false;
++		dev = table + n * PMP_SOC_DEVICE_SIZE;
++		if (!get_unaligned_le32(dev) ||
++		    !!(get_unaligned_le32(dev + 8) & PMP_SOC_DEVICE_ACK) !=
++		    !!(ack & BIT_ULL(n)))
++			return false;
++	}
++	return true;
++}
++
+ /* Packed integer arguments are validated before the PMP driver patches them. */
+ static inline bool apple_pmp_bootargs_valid(const u8 *args, size_t len)
+ {
+diff --git a/drivers/pmdomain/apple/pmp-report.c b/drivers/pmdomain/apple/pmp-report.c
+index 43aaeab38..4ed743e82 100644
+--- a/drivers/pmdomain/apple/pmp-report.c
++++ b/drivers/pmdomain/apple/pmp-report.c
+@@ -63,6 +63,8 @@ struct apple_pmp_report {
+ 	u64 ack;
+ 	/* Requests that must be acknowledged before any consumer can proceed. */
+ 	u64 startup_ack;
++	/* Seeded bits that are soc-device record indices (apple,soc-device-record). */
++	u64 record_seed;
+ 	struct of_changeset pmp_cs;
+ 	struct work_struct start_work;
+ 	/* The requests are in place; the first consumer starts the PMP. */
+@@ -79,6 +81,38 @@ struct apple_pmp_report {
+ /* Serializes M3 publication, startup requests and waiter references. */
+ static DEFINE_MUTEX(apple_pmp_report_mutex);
+ 
++/*
++ * The PTD request/acknowledge bit of a report entry. An entry's reg is its
++ * soc-device ID - 1. An entry marked apple,soc-device-record is requested by
++ * soc-device record instead: some PMP firmware (T8122) reads the request
++ * word as one bit per record of its apple,tunable-soc-device table, whose
++ * records are not in ID order, so the bit is the index of the record that
++ * holds that ID.
++ */
++static int apple_pmp_report_bit(const struct apple_pmp_report *rep,
++				struct device_node *entry, u32 *bit, bool *record)
++{
++	const u8 *table;
++	int len = 0, index;
++	u32 reg;
++
++	if (of_property_read_u32(entry, "reg", &reg) || reg > 63)
++		return -EINVAL;
++	*record = of_property_read_bool(entry, "apple,soc-device-record");
++	if (!*record) {
++		*bit = reg;
++		return 0;
++	}
++	if (!rep->offsets->starts_pmp || !rep->pmp)
++		return -EINVAL;
++	table = of_get_property(rep->pmp, "apple,tunable-soc-device", &len);
++	index = apple_pmp_record_of_id(table, len > 0 ? len : 0, reg + 1);
++	if (index < 0 || index > 63)
++		return -ENOENT;
++	*bit = index;
++	return 0;
++}
++
+ 
+ static umode_t apple_pmp_temp_is_visible(const void *data,
+ 					 enum hwmon_sensor_types type, u32 attr,
+@@ -361,9 +395,14 @@ static int apple_pmp_t6030_check_layout(struct apple_pmp_report *rep)
+ 		return -EINVAL;
+ 
+ 	table = of_get_property(rep->pmp, "apple,tunable-soc-device", &len);
+-	if (!apple_pmp_devices_valid(table, len, rep->seed, rep->ack,
++	if (!apple_pmp_devices_valid(table, len, rep->seed & ~rep->record_seed,
++				     rep->ack & ~rep->record_seed,
+ 				     rep->offsets->devices_ordered))
+ 		return -EINVAL;
++	if (rep->record_seed &&
++	    !apple_pmp_records_valid(table, len, rep->record_seed,
++				     rep->ack & rep->record_seed))
++		return -EINVAL;
+ 	return 0;
+ }
+ 
+@@ -406,9 +445,21 @@ static int apple_pmp_t6030_check(struct apple_pmp_report *rep)
+ 
+ 	/* 3: the requests this driver seeds, and a PTD with nothing else in it */
+ 	for_each_available_child_of_node(np, child) {
+-		if (!of_property_read_bool(child, "apple,always-on") ||
+-		    of_property_read_u32(child, "reg", &id) || id > 63)
++		bool record;
++
++		if (!of_property_read_bool(child, "apple,always-on"))
+ 			continue;
++		ret = apple_pmp_report_bit(rep, child, &id, &record);
++		if (ret == -EINVAL)
++			continue;
++		if (ret || (rep->seed & BIT_ULL(id))) {
++			of_node_put(child);
++			return dev_err_probe(rep->dev, -EINVAL,
++					     "%s PMP not started: no unique request bit for %pOF\n",
++					     rep->offsets->name, child);
++		}
++		if (record)
++			rep->record_seed |= BIT_ULL(id);
+ 		rep->seed |= BIT_ULL(id);
+ 		if (!of_property_read_bool(child, "apple,no-ack")) {
+ 			rep->ack |= BIT_ULL(id);
+@@ -436,6 +487,9 @@ static int apple_pmp_t6030_check(struct apple_pmp_report *rep)
+ 	dev_info(rep->dev,
+ 		 "PMP halted, firmware %pUb; PTD status %#llx request %#llx ack %#llx; requesting %#llx\n",
+ 		 &image, status, request, ack, rep->seed);
++	if (rep->record_seed)
++		dev_info(rep->dev, "request bits %#llx are soc-device records\n",
++			 rep->record_seed);
+ 	return 0;
+ }
+ 
+@@ -876,6 +930,7 @@ int apple_pmp_report_wait_ready(struct device_node *entry, unsigned long timeout
+ 	struct platform_device *pdev;
+ 	struct apple_pmp_report *rep;
+ 	u64 status, ack;
++	bool record;
+ 	u32 id;
+ 	int ret;
+ 
+@@ -905,7 +960,8 @@ int apple_pmp_report_wait_ready(struct device_node *entry, unsigned long timeout
+ 			ret = -ENODEV;
+ 			goto out_put;
+ 		}
+-		if (!rep->offsets->starts_pmp) {
++		if (!rep->offsets->starts_pmp ||
++		    apple_pmp_report_bit(rep, entry, &id, &record)) {
+ 			ret = -EINVAL;
+ 			goto out_put;
+ 		}
+@@ -1237,6 +1293,7 @@ static int apple_pmp_report_entry_probe(struct platform_device *pdev)
+ 	struct device_node *node = dev->of_node;
+ 	struct apple_pmp_report_entry *ent;
+ 	int ret;
++	bool record;
+ 	const char *name;
+ 	struct of_phandle_iterator it;
+ 
+@@ -1246,9 +1303,9 @@ static int apple_pmp_report_entry_probe(struct platform_device *pdev)
+ 
+ 	ent->dev = dev;
+ 
+-	ret = of_property_read_u32(node, "reg", &ent->id);
++	ret = apple_pmp_report_bit(dev_get_drvdata(dev->parent), node, &ent->id, &record);
+ 	if (ret)
+-		return dev_err_probe(dev, ret, "missing reg property\n");
++		return dev_err_probe(dev, ret, "no request bit (reg, soc-device record)\n");
+ 
+ 	ret = of_property_read_string(node, "label", &name);
+ 	if (ret < 0)
+diff --git a/drivers/soc/apple/t8122-pmp.dtso b/drivers/soc/apple/t8122-pmp.dtso
+index 4b68b1bf7..77d1bc7c0 100644
+--- a/drivers/soc/apple/t8122-pmp.dtso
++++ b/drivers/soc/apple/t8122-pmp.dtso
+@@ -11,10 +11,19 @@
+  * apple,dram-vendor-id and every apple,tunable-* value, including
+  * apple,tunable-uuid).
+  *
+- * The report seeds the display request (DISP, soc-device id 8, request bit
+- * 7) and the storage request (ANS, soc-device id 18, request bit 17). The
+- * PMP, its DART and its mailbox stay disabled here; the PMP report driver
+- * starts the PMP when the display driver first asks for it.
++ * The report seeds the display request (DISP, soc-device id 8) and the
++ * storage request (ANS, soc-device id 18). The PMP, its DART and its
++ * mailbox stay disabled here; the PMP report driver starts the PMP when the
++ * display driver first asks for it.
++ *
++ * Report entries are numbered by soc-device id - 1 (reg). The T8122 PMP
++ * firmware, however, reads the PTD request word as one bit per record of
++ * its apple,tunable-soc-device table, and on T8122 the records are not in
++ * id order (on J613: record 7 is PACC0, 11 DISP, 17 SCODEC, 19 ANS). An
++ * entry marked apple,soc-device-record is therefore requested at the index
++ * of the record that holds its id; the report driver looks it up in the
++ * table. The ANS entry is not marked yet: its request bit 17 still names
++ * record 17, not ANS, as before.
+  */
+ 
+ /dts-v1/;
+@@ -46,6 +55,7 @@ pmp_report_disp: report@7 {
+ 					label = "pmp-disp";
+ 					#power-domain-cells = <0>;
+ 					apple,always-on;
++					apple,soc-device-record;
+ 					phandle = <0x100>;
+ 				};
+ 
+-- 
+2.56.0
+

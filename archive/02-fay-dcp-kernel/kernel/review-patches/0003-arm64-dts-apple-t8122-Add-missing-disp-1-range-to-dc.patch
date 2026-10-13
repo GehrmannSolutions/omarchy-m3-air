@@ -1,0 +1,52 @@
+From cb0bbd68eaeb08f333e77d5ca777ba42d9e29354 Mon Sep 17 00:00:00 2001
+From: Marius Gehrmann <marius@gehrmann.solutions>
+Date: Sun, 11 Oct 2026 16:26:33 +0200
+Subject: [PATCH 3/7] arm64: dts: apple: t8122: Add missing disp-1 range to
+ dcpext
+
+The ADT dispext0 node has six register ranges, like disp0, but the
+dcpext node lists only five: the second display range at 0x318800000
+(size 0x690000) is missing. The firmware addresses these ranges by
+index through map_reg, so every index from 1 on is off by one and the
+bw-scratch index 5 is out of range:
+
+  attempted to read invalid reg index 5
+
+followed by "Couldn't map PMP Scratch registers" and "Realtime
+Bandwidth setup failed" from the dcpext firmware.
+
+Add the range and move the bw-scratch index to 5.
+
+Tested on MacBook Air M3 (J613): with dcpext enabled, map_reg(5)
+resolves to the bw-scratch page and the firmware errors are gone.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_017YMqWu7A3VwEYtHaA1TusK
+---
+ linux/arch/arm64/boot/dts/apple/t8122.dtsi | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/linux/arch/arm64/boot/dts/apple/t8122.dtsi b/linux/arch/arm64/boot/dts/apple/t8122.dtsi
+index 28216bc..7cc3c9d 100644
+--- a/linux/arch/arm64/boot/dts/apple/t8122.dtsi
++++ b/linux/arch/arm64/boot/dts/apple/t8122.dtsi
+@@ -1262,13 +1262,14 @@
+ 			iommus = <&dcpext_dart 5 0x8 0x00000000 0x7 0xffff0000>;
+ 			phandle = <&dcpext>;
+ 
+-			reg-names = "coproc", "disp-0", "disp-1", "disp-2", "disp-3";
++			reg-names = "coproc", "disp-0", "disp-1", "disp-2", "disp-3", "disp-4";
+ 			reg = <0x3 0x1ac00000 0x0 0x4000>,
+ 			      <0x3 0x18000000 0x0 0x690000>,
++			      <0x3 0x18800000 0x0 0x690000>,
+ 			      <0x3 0x19320000 0x0 0x4000>,
+ 			      <0x3 0x19344000 0x0 0x4000>,
+ 			      <0x3 0x1a800000 0x0 0x800000>;
+-			apple,bw-scratch = <&pmgr_dcp 0 4 0x910>;
++			apple,bw-scratch = <&pmgr_dcp 0 5 0x910>;
+ 			apple,iomfb-surfaces = <1 1 0 1>;
+ 			power-domains = <&ps_dispext_cpu>;
+ 			resets = <&ps_dispext_cpu>;
+-- 
+2.56.0
+

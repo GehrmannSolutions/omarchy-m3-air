@@ -1,0 +1,117 @@
+From 51796181aa4121c864784ef24bf8e0be76e78b5f Mon Sep 17 00:00:00 2001
+From: Marius Gehrmann <marius@gehrmann.solutions>
+Date: Mon, 12 Oct 2026 21:12:43 +0200
+Subject: [PATCH 04/12] drm: apple: iomfb: Bring back the 14.7 IOMFB template
+ layouts
+
+Aurora drives 14.7 firmware through its own DCPLink session and dropped
+the 14.7 layouts from the classic IOMFB template. The T8122 dcpext, which
+Linux starts itself, speaks the classic dcpep protocol with 14.7
+firmware, as in asahi-wip-7.2 and AsahiLinux/linux#607. Restore the 14.7
+dcp_swap and swap_submit_req layouts and the 14.7 nits property id. The
+14.7 backlight update flag keeps the bl_unk name, so that the shared
+code needs no change. The 12.3 and 13.x layouts are unchanged.
+
+Link: https://github.com/AsahiLinux/linux/pull/607
+Assisted-by: Claude:claude-opus-5-5
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_017YMqWu7A3VwEYtHaA1TusK
+Signed-off-by: Marius Gehrmann <marius@gehrmann.solutions>
+---
+ drivers/gpu/drm/apple/iomfb.h          |  1 +
+ drivers/gpu/drm/apple/iomfb_template.c |  4 ++++
+ drivers/gpu/drm/apple/iomfb_template.h | 23 +++++++++++++++++++++++
+ 3 files changed, 28 insertions(+)
+
+diff --git a/drivers/gpu/drm/apple/iomfb.h b/drivers/gpu/drm/apple/iomfb.h
+index 7903fad40..2f022a032 100644
+--- a/drivers/gpu/drm/apple/iomfb.h
++++ b/drivers/gpu/drm/apple/iomfb.h
+@@ -79,6 +79,7 @@ struct dcp_packet_header {
+ 
+ enum iomfb_property_id {
+     IOMFB_PROPERTY_NITS = 15, // divide by Brightness_Scale
++    IOMFB_PROPERTY_NITS_V14_7 = 19, // the same, on 14.7 firmware
+ };
+ 
+ #define IOMFB_BRIGHTNESS_MIN 0x10000000
+diff --git a/drivers/gpu/drm/apple/iomfb_template.c b/drivers/gpu/drm/apple/iomfb_template.c
+index 73c6c4b5c..d0752cd18 100644
+--- a/drivers/gpu/drm/apple/iomfb_template.c
++++ b/drivers/gpu/drm/apple/iomfb_template.c
+@@ -206,7 +206,11 @@ static bool iomfbep_cb_match_backlight_service(struct apple_dcp *dcp, int tag, v
+ static void iomfb_cb_pr_publish(struct apple_dcp *dcp, struct iomfb_property *prop)
+ {
+ 	switch (prop->id) {
++#if DCP_FW_VER >= DCP_FW_VERSION(14, 7, 0)
++	case IOMFB_PROPERTY_NITS_V14_7:
++#else
+ 	case IOMFB_PROPERTY_NITS:
++#endif
+ 	{
+ 		if (dcp_has_panel(dcp)) {
+ 			dcp->brightness.nits = prop->value / dcp->brightness.scale;
+diff --git a/drivers/gpu/drm/apple/iomfb_template.h b/drivers/gpu/drm/apple/iomfb_template.h
+index ce9fb9251..6f5824c80 100644
+--- a/drivers/gpu/drm/apple/iomfb_template.h
++++ b/drivers/gpu/drm/apple/iomfb_template.h
+@@ -24,6 +24,9 @@ struct DCP_FW_NAME(dcp_swap) {
+ 
+ 	u64 flags1;
+ 	u64 flags2;
++#if DCP_FW_VER >= DCP_FW_VERSION(14, 7, 0)
++	u8 unk_v14_7[0x48];
++#endif
+ 
+ 	u32 swap_id;
+ 
+@@ -38,19 +41,36 @@ struct DCP_FW_NAME(dcp_swap) {
+ 	u32 bg_color;
+ 	u8 unk_110[0x1b8];
+ 	u32 unk_2c8;
++#if DCP_FW_VER < DCP_FW_VERSION(14, 7, 0)
+ 	u8 unk_2cc[0x14];
+ 	u32 unk_2e0;
++#else
++	u8 unk_2cc[0x40];
++	/*
++	 * 14.7 moved the backlight update flag here (Asahi: bl_update). It
++	 * keeps the name bl_unk so that the shared code sets the flag the
++	 * same way for every firmware.
++	 */
++	u32 bl_unk;
++#endif
+ #if DCP_FW_VER < DCP_FW_VERSION(13, 2, 0)
+ 	u16 unk_2e2;
+ #else
+ 	u8 unk_2e2[3];
+ #endif
++#if DCP_FW_VER < DCP_FW_VERSION(14, 7, 0)
+ 	u64 bl_unk;
++#else
++	u32 bl_unk_v14_7; /* the 13.x bl_unk position; not written */
++#endif
+ 	u32 bl_value; // min value is 0x10000000
+ 	u8  bl_power; // constant 0x40 for on
+ 	u8 unk_2f3[0x2d];
+ #if DCP_FW_VER >= DCP_FW_VERSION(13, 2, 0)
+ 	u8 unk_320[0x13f];
++#if DCP_FW_VER >= DCP_FW_VERSION(14, 7, 0)
++	u8 unk_14_7_2[0x30];
++#endif
+ 	u64 unk_1;
+ #endif
+ } __packed;
+@@ -85,6 +105,9 @@ struct DCP_FW_NAME(dcp_swap_submit_req) {
+ 	u32 clear; // or maybe switch to default fb?
+ #if DCP_FW_VER >= DCP_FW_VERSION(13, 2, 0)
+ 	u32 unkU32Ptr;
++#endif
++#if DCP_FW_VER >= DCP_FW_VERSION(14, 7, 0)
++	u8 padding_14_7[0x234];
+ #endif
+ 	u8 swap_null;
+ 	u8 surf_null[SWAP_SURFACES];
+-- 
+2.56.0
+

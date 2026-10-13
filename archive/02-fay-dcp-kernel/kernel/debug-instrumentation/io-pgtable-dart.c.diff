@@ -1,0 +1,154 @@
+--- drivers/iommu/io-pgtable-dart.c	2026-10-11 19:39:06.517009032 +0200
++++ ~/.cache/fay-build/wip/drivers/iommu/io-pgtable-dart.c	2026-10-10 11:13:12.356022298 +0200
+@@ -63,9 +63,6 @@
+ /* marks PTE as valid */
+ #define APPLE_DART_PTE_VALID		BIT(0)
+ 
+-/* IOPTE accessors */
+-#define iopte_deref(pte, d) __va(iopte_to_paddr(pte, d))
+-
+ struct dart_io_pgtable {
+ 	struct io_pgtable	iop;
+ 
+@@ -74,10 +71,78 @@
+ 	int			bits_per_level;
+ 
+ 	void			*pgd[DART_MAX_TABLES];
++
++	/*
++	 * fay: optional pool for lower-level tables, carved out of the
++	 * firmware page-table region of a locked DART (like macOS does).
++	 */
++	phys_addr_t		pool_pa;
++	void			*pool_va;
++	unsigned int		pool_pages;
++	unsigned long		pool_used;
+ };
+ 
++/* IOPTE accessors */
++#define iopte_deref(pte, d) dart_table_va(d, iopte_to_paddr(pte, d))
++
+ typedef u64 dart_iopte;
+ 
++static bool dart_pool_has_va(struct dart_io_pgtable *data, void *p)
++{
++	size_t sz = data->pool_pages * DART_GRANULE(data);
++
++	return data->pool_va && p >= data->pool_va && p < data->pool_va + sz;
++}
++
++static phys_addr_t dart_table_pa(struct dart_io_pgtable *data, void *p)
++{
++	if (dart_pool_has_va(data, p))
++		return data->pool_pa + (p - data->pool_va);
++	return __pa(p);
++}
++
++static void *dart_table_va(struct dart_io_pgtable *data, phys_addr_t pa)
++{
++	size_t sz = data->pool_pages * DART_GRANULE(data);
++
++	if (data->pool_va && pa >= data->pool_pa && pa < data->pool_pa + sz)
++		return data->pool_va + (pa - data->pool_pa);
++	return __va(pa);
++}
++
++static void *dart_table_alloc(struct dart_io_pgtable *data, gfp_t gfp,
++			      size_t sz)
++{
++	unsigned int i;
++
++	if (data->pool_va && sz == DART_GRANULE(data)) {
++		for (i = 0; i < data->pool_pages; i++) {
++			void *p;
++
++			if (test_and_set_bit(i, &data->pool_used))
++				continue;
++			p = data->pool_va + i * sz;
++			memset(p, 0, sz);
++			pr_info("fay-pool: table page %u (pa %pa) allocated\n",
++				i, &(phys_addr_t){ data->pool_pa + i * sz });
++			return p;
++		}
++		pr_warn_once("fay-pool: table pool exhausted, using normal memory\n");
++	}
++	return iommu_alloc_pages_sz(gfp, sz);
++}
++
++static void dart_table_free(struct dart_io_pgtable *data, void *p)
++{
++	if (dart_pool_has_va(data, p)) {
++		clear_bit((p - data->pool_va) / DART_GRANULE(data),
++			  &data->pool_used);
++		return;
++	}
++	iommu_free_pages(p);
++}
++
++
+ 
+ static dart_iopte paddr_to_iopte(phys_addr_t paddr,
+ 				     struct dart_io_pgtable *data)
+@@ -144,7 +209,7 @@
+ {
+ 	dart_iopte old, new;
+ 
+-	new = paddr_to_iopte(__pa(table), data) | APPLE_DART_PTE_VALID;
++	new = paddr_to_iopte(dart_table_pa(data, table), data) | APPLE_DART_PTE_VALID;
+ 
+ 	/*
+ 	 * Ensure the table itself is visible before its PTE can be.
+@@ -256,13 +321,13 @@
+ 
+ 		/* no table present */
+ 		if (!pte) {
+-			cptep = iommu_alloc_pages_sz(gfp, tblsz);
++			cptep = dart_table_alloc(data, gfp, tblsz);
+ 			if (!cptep)
+ 				return -ENOMEM;
+ 
+ 			pte = dart_install_table(cptep, ptep, 0, data);
+ 			if (pte)
+-				iommu_free_pages(cptep);
++				dart_table_free(data, cptep);
+ 
+ 			/* L2 table is present (now) */
+ 			pte = READ_ONCE(*ptep);
+@@ -463,7 +528,7 @@
+ 				apple_dart_free_pgtables(data, iopte_deref(pte, data), level - 1);
+ 		}
+ 	}
+-	iommu_free_pages(start);
++	dart_table_free(data, start);
+ }
+ 
+ static void apple_dart_free_pgtable(struct io_pgtable *iop)
+@@ -477,6 +542,28 @@
+ 	kfree(data);
+ }
+ 
++/*
++ * fay: give a freshly allocated DART page table a pool of firmware-owned
++ * table pages. Must be called before the first map. @used marks pages that
++ * are already in use (e.g. by the locked L1 or iBoot's own tables).
++ */
++void apple_dart_pgtable_set_pool(struct io_pgtable_ops *ops, phys_addr_t pa,
++				 void *va, unsigned int pages,
++				 unsigned long used);
++void apple_dart_pgtable_set_pool(struct io_pgtable_ops *ops, phys_addr_t pa,
++				 void *va, unsigned int pages,
++				 unsigned long used)
++{
++	struct dart_io_pgtable *data = io_pgtable_ops_to_data(ops);
++
++	if (pages > BITS_PER_LONG)
++		pages = BITS_PER_LONG;
++	data->pool_pa = pa;
++	data->pool_pages = pages;
++	data->pool_used = used;
++	data->pool_va = va;
++}
++
+ struct io_pgtable_init_fns io_pgtable_apple_dart_init_fns = {
+ 	.alloc	= apple_dart_alloc_pgtable,
+ 	.free	= apple_dart_free_pgtable,
