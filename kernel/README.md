@@ -33,11 +33,11 @@ through both USB-C ports of the J613 (MacBook Air 13" M3).
 
 ## Lid closed with two external displays (`patches-clamshell/`, experimental)
 
-Ten more patches on top of `patches/` that let the **internal** display pipeline drive a second
+Eleven more patches on top of `patches/` that let the **internal** display pipeline drive a second
 external display on the left-front port while the lid is closed, as macOS does
 (background and test results: [../docs/clamshell.md](../docs/clamshell.md)). They are **unsigned
-work in progress** (no `Signed-off-by` yet), tested on one machine with a test kernel (`r11`,
-2026-10-13), and not part of a release.
+work in progress** (no `Signed-off-by` yet), tested on one machine with test kernels (`r11`, 2026-10-13;
+`r12` adds 0023 and is not tested on hardware yet), and not part of a release.
 
 | # | What |
 |---|---|
@@ -51,6 +51,7 @@ work in progress** (no `Signed-off-by` yet), tested on one machine with a test k
 | 0020 | drm/apple: move the front display to the internal pipe when a rear display needs `dcpext` |
 | 0021 | drm/apple: the panel comes back at once on lid open when its CRTC is already off |
 | 0022 | drm/apple: route the front display to the pipeline the compositor pairs it with (internal pipe first while the lid is closed) |
+| 0023 | drm/apple: when the lid closes and a rear display waits for `dcpext`, the front display moves to the internal pipe and the rear one takes `dcpext`; the boot-time move no longer runs under a running compositor |
 
 Apply after `patches/` (`git am ../omarchy-m3-air/kernel/patches-clamshell/*.patch`). The device-tree
 change is patch 0014, so boot.bin has to be rebuilt with the new J613 DTB
@@ -59,11 +60,10 @@ tree**, so put 0013 into every kernel you might boot first. Use it together with
 [../desktop/lid-policy/](../desktop/lid-policy/): without it logind suspends the closed laptop while
 a display moves between pipelines.
 
-Open items: the move of a front display that already sits on `dcpext` (0020) with the lid policy
-running, suspend/resume with the lid closed, booting with the lid closed; a path meant for boot
-("before a compositor started") also runs on a lid close after resume (harmless so far, the display
-just moves earlier); a late power-off after a quick unplug/replug of the rear display can still
-drop the new connection; the 3440x1440 test display renegotiates once after every plug.
+Open items: test r12 (0023) on hardware; the move of a front display that already sits on `dcpext`
+(0020) with the lid policy running; suspend/resume with the lid closed; booting with the lid closed;
+a late power-off after a quick unplug/replug of the rear display can still drop the new connection;
+the 3440x1440 test display renegotiates once after every plug.
 
 ## Building
 

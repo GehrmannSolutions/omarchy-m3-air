@@ -33,8 +33,9 @@ progress), the device tree from that set in boot.bin ([../boot/](../boot/)), and
   the lid is closed the kernel also routes a new front display to the internal pipe first. Kernel
   and compositor then always pick the same pipeline.
 - **Move when needed:** if the front display already sits on `dcpext` (plugged in with the lid
-  open) and a display arrives on the rear port with the lid closed, the front display moves to the
-  internal pipe and `dcpext` takes the rear display.
+  open) and a display on the rear port needs `dcpext` while the lid is closed (it arrives then, or
+  it was already waiting when the lid closed), the front display moves to the internal pipe and
+  `dcpext` takes the rear display (r12). Otherwise nothing moves on a lid close.
 - **Lid open:** A475(1), the display on the internal pipe lets go of it (it waits for `dcpext`
   again, with the usual log line), the panel reconnects and powers on. A front display that can
   have a free `dcpext` reports itself only after the panel is connected again, so the panel gets
@@ -52,6 +53,7 @@ progress), the device tree from that set in boot.bin ([../boot/](../boot/)), and
 | Lid closed, ultrawide plugged into the rear port as well → `dcpext`, both displays with a picture | ✅ |
 | Lid open → panel back after 33–173 ms, front display waits, rear display stays | ✅ |
 | 5 close/open cycles with both displays | ✅ 5/5, front display on the internal pipe ~2.5 s after closing |
+| Lid open, rear display waits, lid closed (r11) | ❌ front display moved, rear display not offered `dcpext` until replugged → fixed in r12 (0023), not yet tested |
 | Front display on `dcpext`, lid closed, rear display arrives (move) | 🟡 move works; with lid-policy not yet re-tested |
 | Suspend/resume with the lid closed, boot with the lid closed | ⏳ open |
 
@@ -75,8 +77,10 @@ progress), the device tree from that set in boot.bin ([../boot/](../boot/)), and
 
 - Re-test the move (front display already on `dcpext`) with lid-policy running; suspend/resume and
   boot with the lid closed.
-- A path meant for boot ("before a compositor started") also runs on a lid close after resume. The
-  display just moves to the internal pipe earlier; to be cleaned up.
+- r12 (0023) fixes two faults seen with r11: a path meant for boot ("before a compositor started")
+  ran on every lid close, because its compositor check never found the DRM device on this machine;
+  and a rear display waiting for `dcpext` was not offered it when the lid closed. Not yet tested on
+  hardware.
 - A late power-off after a quick unplug/replug of the rear display can still drop the new
   connection.
 - Patches without `Signed-off-by`; no release yet.
