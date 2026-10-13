@@ -56,8 +56,8 @@ project and file they change; the full texts are in [LICENSES/](LICENSES/):
 | Files | License |
 |---|---|
 | everything we wrote (scripts, systemd units, READMEs, docs) | MIT |
-| `kernel/patches*/`, kernel diffs in `archive/` (drivers) | GPL-2.0-only OR MIT, as the changed files in `drivers/gpu/drm/apple`, `drivers/soc/apple`, `drivers/pmdomain/apple` |
-| device-tree patches (`kernel/patches/0002`, `0003`, `boot/j613-front-route.dts.patch`) | GPL-2.0-or-later OR MIT, as `arch/arm64/boot/dts/apple/` |
+| driver changes in `kernel/patches*/` and the DCP/display diffs in `archive/` | GPL-2.0-only OR MIT, as the changed files in `drivers/gpu/drm/apple`, `drivers/gpu/drm/asahi`, `drivers/soc/apple`, `drivers/pmdomain/apple` |
+| device-tree changes (`*.dts`, `*.dtsi`, `*.dtso` in any patch, `boot/j613-front-route.dts.patch`) | GPL-2.0-or-later OR MIT, as `arch/arm64/boot/dts/apple/` |
 | other Linux kernel changes in `archive/` (e.g. `drivers/usb/typec/tipd`, `drivers/iommu`) | GPL-2.0-only, as the Linux kernel |
 | `boot/m1n1-aurora-t8122-dcpext.patch`, m1n1 drafts in `archive/` | MIT, as m1n1 |
 | `archive/02-fay-dcp-kernel/aquamarine/` | BSD-3-Clause, as aquamarine |
