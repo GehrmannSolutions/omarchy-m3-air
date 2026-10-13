@@ -1,0 +1,14 @@
+# SPDX-FileCopyrightText: 2026 Marius Gehrmann
+# SPDX-License-Identifier: MIT
+[Unit]
+Description=Fay: lid policy (lock and suspend when the lid is closed without an external display, with a grace period)
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+ExecStart=/usr/bin/systemd-inhibit --what=handle-lid-switch --who=fay-lid-policy --why="Fay lid policy: suspend after a grace period, see fay-lid-policy" --mode=block %h/.local/bin/fay-lid-policy
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target

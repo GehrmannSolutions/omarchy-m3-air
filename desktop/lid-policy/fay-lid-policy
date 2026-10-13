@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Marius Gehrmann
+# SPDX-License-Identifier: MIT
+# Fay (2026-10-13): lid policy for Omarchy on the MacBook Air M3 (J613).
+#
+# logind suspends a closed laptop the moment it counts no external display, and
+# while the lid is closed it counts again after every event it handles. On this
+# Mac a display that changes pipelines (lid closed, a second display arrives and
+# the first one moves to the internal pipe) is unplugged for about three seconds,
+# so logind suspended in the middle of every such move. GNOME and KDE take the
+# lid switch from logind with a "handle-lid-switch" inhibitor and decide
+# themselves; this does the same for Omarchy, with the same rule as logind's
+# defaults (HandleLidSwitch=suspend, HandleLidSwitchDocked=ignore) plus a grace
+# period: lid closed and no external display for FAY_LID_GRACE seconds (default
+# 10) -> lock (omarchy-system-lock) and suspend. The unit runs this under
+# systemd-inhibit, so if it stops, logind's own lid handling is back at once.
+#
+# FAY_LID_DRYRUN=1 logs what it would do instead of suspending.
+# Journal: journalctl --user -t fay-lid-policy
+# Remove: systemctl --user disable --now fay-lid-policy.service
+set -uo pipefail
+
+GRACE=${FAY_LID_GRACE:-10}
+DRYRUN=${FAY_LID_DRYRUN:-0}
+
+log() { logger -t fay-lid-policy "$*"; }
+
+lid_closed() {
+  [[ $(busctl get-property org.freedesktop.login1 /org/freedesktop/login1 \
+       org.freedesktop.login1.Manager LidClosed 2>/dev/null) == "b true" ]]
+}
+
+# Same test as omarchy-hw-external-monitors: any connected connector that is not
+# the internal panel. A display waiting for a pipeline reads disconnected.
+external_display() {
+  local s
+  for s in /sys/class/drm/card*-*/status; do
+    [[ -e $s ]] || continue
+    [[ $s =~ -(eDP|LVDS|DSI)-[^/]+/status$ ]] && continue
+    [[ $(<"$s") == connected ]] && return 0
+  done
+  return 1
+}
+
+suspends() { cat /sys/power/suspend_stats/success 2>/dev/null || echo 0; }
+
+mode=""; [[ $DRYRUN != 0 ]] && mode=" (dry run)"
+log "started: lid closed + no external display for ${GRACE}s -> lock and suspend$mode"
+since=
+while sleep 1; do
+  if lid_closed && ! external_display; then
+    now=$(date +%s)
+    if [[ -z $since ]]; then
+      since=$now
+      log "lid closed, no external display: suspending in ${GRACE}s unless one comes back"
+    fi
+    (( now - since >= GRACE )) || continue
+    if [[ $DRYRUN != 0 ]]; then
+      log "dry run: would lock and suspend now"
+      since=
+      sleep 30
+      continue
+    fi
+    log "locking and suspending"
+    before=$(suspends)
+    omarchy-system-lock >/dev/null 2>&1 || true
+    systemctl suspend || log "systemctl suspend failed"
+    # Wait for the resume (or give up after 60 s) before judging again.
+    for _ in $(seq 60); do
+      sleep 1
+      [[ $(suspends) != "$before" ]] && break
+    done
+    since=
+  elif [[ -n $since ]]; then
+    lid_closed && log "external display back: not suspending" || log "lid open: not suspending"
+    since=
+  fi
+done

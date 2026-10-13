@@ -1,0 +1,100 @@
+From 8bead0e80f9b0350754377aba16923932123f9aa Mon Sep 17 00:00:00 2001
+From: Marius Gehrmann <marius@gehrmann.solutions>
+Date: Tue, 13 Oct 2026 17:04:57 +0200
+Subject: [PATCH 14/22] arm64: dts: apple: t8122-j613: Give the internal DCP a
+ route to the front port
+
+With the lid closed and two external displays, macOS drives one of them
+with dcpext and the other one with the internal DCP's pipe, whose
+panel is off then (IOMFBIntDcpUsedForExtWhenLidClose). In the J613 ADT
+the internal DCP is display-crossbar ufp0, port 0: crossbar state 0
+(dispext0,0), here on ATC1's crossbar, with DPTX target 1 as dcpext's
+route to the same port.
+
+Give the internal DCP that Type-C display route to the left-front port
+(typec1): ATC1's DP PHY and display crossbar as typec0, crossbar state 0,
+DPTX target 1, and a second endpoint on the front connector's port@3,
+one per pipeline as on the M1 Pro/Max laptops.
+
+The route stays disabled, like dcpext's; the display gate enables it
+together with dcpext. The display driver offers it only while the lid
+is closed and the panel is off, and only to a display that dcpext
+cannot take.
+
+Assisted-by: Claude:claude-opus-5-5
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_017YMqWu7A3VwEYtHaA1TusK
+---
+ arch/arm64/boot/dts/apple/t8122-j613.dts | 49 +++++++++++++++++++++++-
+ 1 file changed, 48 insertions(+), 1 deletion(-)
+
+diff --git a/arch/arm64/boot/dts/apple/t8122-j613.dts b/arch/arm64/boot/dts/apple/t8122-j613.dts
+index 4dda28adc..07e66fd78 100644
+--- a/arch/arm64/boot/dts/apple/t8122-j613.dts
++++ b/arch/arm64/boot/dts/apple/t8122-j613.dts
+@@ -353,14 +353,61 @@ typec0_dcpext: endpoint {
+ 	};
+ };
+ 
++/*
++ * With the lid closed the internal DCP's pipe can drive a second external
++ * display on the left-front port, as macOS does: in the J613 ADT the
++ * internal DCP is display-crossbar ufp0, port 0, which is crossbar state 0
++ * (dispext0,0) on ATC1's crossbar, DPTX target 1 like dcpext's route@1. The
++ * pipe's first DPTX core drives the panel otherwise, so the display driver
++ * only offers this route while the lid is closed and the panel is off, and
++ * only to a display that dcpext cannot take.
++ *
++ * The route stays disabled here, like dcpext's: the display gate enables it
++ * together with dcpext. The front connector has one endpoint per pipeline
++ * that can drive it, as on the M1 Pro/Max laptops.
++ */
++&dcp {
++	phys = <&atcphy1 PHY_TYPE_DP>;
++	phy-names = "typec0";
++	mux-controls = <&atcphy1_xbar 0>;
++	mux-control-names = "typec0";
++	apple,typec-mux-indices = <0>;
++	apple,typec-dptx-phys = <1>;
++
++	typec-routes {
++		#address-cells = <1>;
++		#size-cells = <0>;
++
++		route@0 {
++			reg = <0>;
++			mode-switch;
++			status = "disabled";
++
++			port {
++				dcp_typec1: endpoint {
++					remote-endpoint = <&typec1_dcp>;
++				};
++			};
++		};
++	};
++};
++
+ &typec1 {
+ 	ports {
+ 		port@3 {
+ 			reg = <3>;
++			#address-cells = <1>;
++			#size-cells = <0>;
+ 
+-			typec1_dcpext: endpoint {
++			typec1_dcpext: endpoint@0 {
++				reg = <0>;
+ 				remote-endpoint = <&dcpext_typec1>;
+ 			};
++
++			typec1_dcp: endpoint@1 {
++				reg = <1>;
++				remote-endpoint = <&dcp_typec1>;
++			};
+ 		};
+ 	};
+ };
+-- 
+2.56.0
+

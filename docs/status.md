@@ -13,7 +13,7 @@ display. "Rear" = rear-left USB-C port, "front" = left-front USB-C port.
 | K5 | Switch front → rear (unplug, plug) | ✅ twice without replugging |
 | K6 | Switch rear → front | ✅ twice without replugging |
 | K7 | After a failed plug, a replugged display comes back without a reboot | ✅ |
-| K8 | Lid closed, two external displays | 🟡 works in the development kernel, clean version in progress ([clamshell.md](clamshell.md)) |
+| K8 | Lid closed, two external displays | 🟡 works in the test kernel r11 with [desktop/lid-policy](../desktop/lid-policy/), not in a release yet ([clamshell.md](clamshell.md)) |
 | K9 | No soft lockups, RCU stalls or "failed to acknowledge" | ✅ |
 | K10 | Panel after a lid-closed boot + suspend | ❌ dark once on the development kernel; not yet tested on v2 |
 | K11 | Screen is locked before suspend | 🟡 3 of 9 suspends unlocked on 10-11/12, the last three were fine |

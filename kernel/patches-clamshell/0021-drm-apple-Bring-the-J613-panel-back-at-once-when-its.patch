@@ -1,0 +1,95 @@
+From 0b1d2bb03a8f7b674f33a3d984def880f7e0166b Mon Sep 17 00:00:00 2001
+From: Marius Gehrmann <marius@gehrmann.solutions>
+Date: Tue, 13 Oct 2026 21:49:50 +0200
+Subject: [PATCH 21/22] drm: apple: Bring the J613 panel back at once when its
+ CRTC is already off
+
+When the lid opens while a Type-C display has the internal pipe, that
+display lets go of the pipe first, and the panel's connector comes back
+once the compositor has switched the pipe's CRTC off, or two seconds
+later. The compositor usually switches it off within milliseconds of the
+display going away, while the lid work is still taking the display's
+route down; dcp_poweroff() then found the route still active, did not
+bring the panel back, and the panel waited the full two seconds.
+
+Remember whether the pipe's CRTC is on (dcp_poweron() to dcp_poweroff()).
+The lid work brings the panel back at once when the CRTC is already off
+by the time the route is down, and only waits for the compositor
+otherwise; dcp_poweroff() kicks the panel work either way, which does
+nothing while the route is still active.
+
+Assisted-by: Claude:claude-opus-5-5
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_017YMqWu7A3VwEYtHaA1TusK
+---
+ drivers/gpu/drm/apple/dcp-internal.h |  2 ++
+ drivers/gpu/drm/apple/dcp.c          | 24 +++++++++++++++++++-----
+ 2 files changed, 21 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/gpu/drm/apple/dcp-internal.h b/drivers/gpu/drm/apple/dcp-internal.h
+index 37b51496a..a218733c6 100644
+--- a/drivers/gpu/drm/apple/dcp-internal.h
++++ b/drivers/gpu/drm/apple/dcp-internal.h
+@@ -214,6 +214,8 @@ struct apple_dcp {
+ 	 */
+ 	bool clamshell_free;
+ 	bool clamshell_panel_away;
++	/* The pipe's one CRTC is on (dcp_poweron() to dcp_poweroff()). */
++	bool clamshell_crtc_on;
+ 	struct delayed_work clamshell_panel_work;
+ 	struct apple_dcp_v26 *v26;
+ 
+diff --git a/drivers/gpu/drm/apple/dcp.c b/drivers/gpu/drm/apple/dcp.c
+index 4291a010a..b95c75daa 100644
+--- a/drivers/gpu/drm/apple/dcp.c
++++ b/drivers/gpu/drm/apple/dcp.c
+@@ -1376,9 +1376,15 @@ static void dcp_lid_work_fn(struct work_struct *work)
+ 		WRITE_ONCE(dcp->clamshell_free, free);
+ 		gave_back |= dcp_typec_pipeline_changed(dcp);
+ 	}
++	/*
++	 * A display that let go of the pipe still has the CRTC until the
++	 * compositor switches it off (dcp_poweroff() brings the panel back
++	 * then); if it has done so already, the panel comes back at once.
++	 */
+ 	if (!closed && READ_ONCE(dcp->clamshell_panel_away))
+ 		mod_delayed_work(system_wq, &dcp->clamshell_panel_work,
+-				 gave_back ? msecs_to_jiffies(DCP_CLAMSHELL_PANEL_MS) : 0);
++				 gave_back && READ_ONCE(dcp->clamshell_crtc_on) ?
++				 msecs_to_jiffies(DCP_CLAMSHELL_PANEL_MS) : 0);
+ }
+ static DECLARE_WORK(dcp_lid_work, dcp_lid_work_fn);
+ 
+@@ -1762,6 +1768,8 @@ void dcp_poweron(struct platform_device *pdev)
+ 	unsigned long remaining;
+ 	int ret;
+ 
++	if (dcp->clamshell)
++		WRITE_ONCE(dcp->clamshell_crtc_on, true);
+ 	if (dcp_is_typec_output(dcp)) {
+ 		scoped_guard(mutex, &dcp->hpd_mutex)
+ 			dcp->crtc_unplugs = dcp->typec_unplugs;
+@@ -1830,10 +1838,16 @@ void dcp_poweroff(struct platform_device *pdev)
+ 	cancel_delayed_work(&dcp->swap_watchdog_wq);
+ 	if (dcp->avep)
+ 		av_service_disconnect(dcp);
+-	/* The CRTC a Type-C display let go of: its panel can come back now. */
+-	if (dcp->clamshell && READ_ONCE(dcp->clamshell_panel_away) &&
+-	    !READ_ONCE(dcp->active_typec_route))
+-		mod_delayed_work(system_wq, &dcp->clamshell_panel_work, 0);
++	/*
++	 * The CRTC a Type-C display let go of: its panel can come back now,
++	 * or, while the lid work is still taking that display's route down,
++	 * once it has (see dcp_lid_work_fn()).
++	 */
++	if (dcp->clamshell) {
++		WRITE_ONCE(dcp->clamshell_crtc_on, false);
++		if (READ_ONCE(dcp->clamshell_panel_away))
++			mod_delayed_work(system_wq, &dcp->clamshell_panel_work, 0);
++	}
+ 
+ 	/*
+ 	 * The display this CRTC was powered on for has been unplugged since:
+-- 
+2.56.0
+

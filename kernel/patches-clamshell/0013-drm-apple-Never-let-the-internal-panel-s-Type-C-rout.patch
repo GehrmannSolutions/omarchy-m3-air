@@ -1,0 +1,111 @@
+From 36f3cb94171c810e002259586f66af0b200dd043 Mon Sep 17 00:00:00 2001
+From: Marius Gehrmann <marius@gehrmann.solutions>
+Date: Tue, 13 Oct 2026 17:03:43 +0200
+Subject: [PATCH 13/22] drm: apple: Never let the internal panel's Type-C route
+ hold up the panel
+
+On J613 the internal DCP gets a Type-C display route to the left-front
+USB-C port in the device tree: with the lid closed and the panel off,
+its pipe can drive a second external display, as on macOS. The route
+stays disabled there; the display gate enables it at boot together with
+the dcpext. Without the gate (the dcpext not started, the 26.6 profile
+that includes the J613 device tree, or a kernel that does not know the
+route), the processor has a typec-routes container with no enabled
+route, which made route registration fail with "Type-C route container
+is empty" and took the panel down with it.
+
+- A typec-routes container without an enabled route means no route, for
+  every processor but the external ones (T6030 and T8122 dcpext, whose
+  routes are enabled together with them and must register).
+- On the internal panel's processor (14.7 DCPLink session), a route that
+  fails to register is disabled in the device tree, as for a T6030
+  external processor, and the panel goes on without it.
+
+Device trees whose routes are enabled are unchanged.
+
+Assisted-by: Claude:claude-opus-5-5
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_017YMqWu7A3VwEYtHaA1TusK
+---
+ drivers/gpu/drm/apple/dcp-fabric.c   |  9 +++++++++
+ drivers/gpu/drm/apple/dcp-internal.h | 10 ++++++++++
+ drivers/gpu/drm/apple/dcp.c          | 13 +++++++++----
+ 3 files changed, 28 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/gpu/drm/apple/dcp-fabric.c b/drivers/gpu/drm/apple/dcp-fabric.c
+index 117d38373..883429eff 100644
+--- a/drivers/gpu/drm/apple/dcp-fabric.c
++++ b/drivers/gpu/drm/apple/dcp-fabric.c
+@@ -3494,6 +3494,15 @@ int dcp_register_typec_routes(struct apple_dcp *dcp)
+ 		of_get_child_by_name(dcp->dev->of_node, "typec-routes");
+ 	struct dcp_route_probe_context ctx = { .dcp = dcp, .routes = routes };
+ 
++	/*
++	 * The internal processor's route stays disabled in the device tree
++	 * unless the display gate enables it at boot (J613, also seen by the
++	 * 26.6 profile that includes its device tree): then it has no route.
++	 * An external processor without an enabled route still fails.
++	 */
++	if (routes && !dcp->external && !dcp->ext_failsafe &&
++	    !of_get_available_child_count(routes))
++		return 0;
+ 	return dcp_fabric_run_probe(!!routes, dcp_register_typec_routes_present, &ctx);
+ }
+ 
+diff --git a/drivers/gpu/drm/apple/dcp-internal.h b/drivers/gpu/drm/apple/dcp-internal.h
+index e5e40af46..bd9cca0ad 100644
+--- a/drivers/gpu/drm/apple/dcp-internal.h
++++ b/drivers/gpu/drm/apple/dcp-internal.h
+@@ -456,6 +456,16 @@ static inline bool dcp_fw_is_14_7(const struct apple_dcp *dcp)
+ 	       dcp->fw_compat == DCP_FIRMWARE_V_14_7_TEMPLATE;
+ }
+ 
++/*
++ * The internal panel's processor on Aurora's DCPLink session (T6030, T8122).
++ * On J613 it also has a Type-C display route, which the display gate enables
++ * at boot together with the dcpext.
++ */
++static inline bool dcp_is_v14_panel(const struct apple_dcp *dcp)
++{
++	return dcp->fw_compat == DCP_FIRMWARE_V_14_7 && !dcp->external;
++}
++
+ /*
+  * The T8122 dcpext connects its DPTX port as AsahiLinux/linux#607 does,
+  * the kernel this firmware was first driven with: no validation of the
+diff --git a/drivers/gpu/drm/apple/dcp.c b/drivers/gpu/drm/apple/dcp.c
+index 615704828..4d8a1b44c 100644
+--- a/drivers/gpu/drm/apple/dcp.c
++++ b/drivers/gpu/drm/apple/dcp.c
+@@ -2413,19 +2413,24 @@ static int dcp_fixed_output_error(struct apple_dcp *dcp, int err, const char *wh
+  * A T6030 external processor whose Type-C routes did not register: disable
+  * them in the device tree so that the ports stop waiting for them, and add
+  * the processor to the DRM device as a pipe that never starts, so that the
+- * panel is not held up either.
++ * panel is not held up either. The same for the internal panel's processor
++ * (J613): its route is an extra, the panel goes on without it.
+  */
+ static int dcp_native_routes_error(struct apple_dcp *dcp, int err)
+ {
+-	if (!dcp->external_native)
++	if (!dcp->external_native && !dcp_is_v14_panel(dcp))
+ 		return err;
+ 	if (err == -EPROBE_DEFER) {
+ 		err = driver_deferred_probe_check_state(dcp->dev);
+ 		if (err == -EPROBE_DEFER)
+ 			return err;
+ 	}
+-	dev_err(dcp->dev, "Type-C display routes unusable: %d; USB-C ports go on without this processor\n",
+-		err);
++	if (dcp->external_native)
++		dev_err(dcp->dev, "Type-C display routes unusable: %d; USB-C ports go on without this processor\n",
++			err);
++	else
++		dev_err(dcp->dev, "Type-C display route unusable: %d; the panel goes on without it\n",
++			err);
+ 	dcp_typec_routes_disable(dcp);
+ 	return 0;
+ }
+-- 
+2.56.0
+

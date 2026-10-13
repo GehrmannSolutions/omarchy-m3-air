@@ -12,14 +12,71 @@ both external displays showed a picture in 6 of 6 lid-close cycles (first frame 
 and the panel came back on lid open. Remaining remarks in the log: the modeset is sent before the
 crossbar is active ("Modeset done, but pipe not enabled"), and timings are set twice.
 
-## Phase 2 (in progress)
+## Phase 2 (works in a test kernel, 2026-10-13)
 
-Same behaviour as a clean addition to the series:
+The same behaviour as a clean set on top of the series:
+[../kernel/patches-clamshell/](../kernel/patches-clamshell/) (patches 0013–0022, unsigned work in
+progress), the device tree from that set in boot.bin ([../boot/](../boot/)), and the desktop helper
+[../desktop/lid-policy/](../desktop/lid-policy/).
 
-- device tree: the internal `dcp` gets a (disabled) Type-C route; the front connector gets two
-  endpoints (`dcpext` first, `dcp` second), as on the t600x laptops;
-- rule "dcpext first": the internal pipeline is used only when the lid is closed **and** `dcpext`
-  is already busy; crossbar activation before the modeset;
-- test plan: lid closed/open with one and two displays, port order both ways, suspend, replug.
+### How it works
 
-Patches and a release follow once it passes the tests.
+- **Lid closed:** the driver tells the internal DCP firmware (A475(2)), powers the panel off
+  (A472(0)) and reports the panel connector (`eDP-1`) **disconnected** until the lid opens. The
+  panel is never powered while the lid is closed; a compositor that tries gets a warning, no
+  firmware call.
+- **Internal pipe for the left-front port:** while the lid is closed and the panel is off, the
+  internal pipeline can drive a display on the left-front port (DisplayPort core 0, crossbar state
+  `dispext0,0`). The rear port can only be driven by `dcpext`.
+- **Ranking that matches the compositor:** Hyprland (aquamarine) gives each connected display the
+  lowest free CRTC it may use and keeps it. The internal pipe's CRTC has the lower index, so while
+  the lid is closed the kernel also routes a new front display to the internal pipe first. Kernel
+  and compositor then always pick the same pipeline.
+- **Move when needed:** if the front display already sits on `dcpext` (plugged in with the lid
+  open) and a display arrives on the rear port with the lid closed, the front display moves to the
+  internal pipe and `dcpext` takes the rear display.
+- **Lid open:** A475(1), the display on the internal pipe lets go of it (it waits for `dcpext`
+  again, with the usual log line), the panel reconnects and powers on. A front display that can
+  have a free `dcpext` reports itself only after the panel is connected again, so the panel gets
+  its CRTC back.
+- **Suspend policy:** a display that changes pipeline is unplugged for 3–5 s, and logind suspends a
+  closed laptop the moment it counts no external display. The lid-policy helper takes the lid
+  switch from logind and waits 10 s before it locks and suspends.
+
+### Test results (test kernel r11 + lid-policy)
+
+| Test | Result |
+|---|---|
+| Lid closed, no display → locked, then suspended (lid-policy) | ✅ |
+| Lid closed, portable display plugged into the front port → internal pipe, picture | ✅ |
+| Lid closed, ultrawide plugged into the rear port as well → `dcpext`, both displays with a picture | ✅ |
+| Lid open → panel back after 33–173 ms, front display waits, rear display stays | ✅ |
+| 5 close/open cycles with both displays | ✅ 5/5, front display on the internal pipe ~2.5 s after closing |
+| Front display on `dcpext`, lid closed, rear display arrives (move) | 🟡 move works; with lid-policy not yet re-tested |
+| Suspend/resume with the lid closed, boot with the lid closed | ⏳ open |
+
+### What went wrong on the way (and why the design looks like this)
+
+- **Panel powered with the lid closed (r7):** after A475(2) the firmware treats the internal pipe
+  as the second external display and swallows panel frames; the next call times out and the
+  internal DCP is gone until a reboot. Omarchy powers the panel whenever no external display is
+  left, and Hyprland does at start-up. → the panel is reported disconnected while the lid is
+  closed and is never powered then.
+- **Suspend in the middle of a move (r8, r10):** logind counted zero external displays for a few
+  milliseconds and suspended at once. Keeping the moving display "connected" does not work with
+  aquamarine (it keeps a connected display's CRTC, so the other display never gets one). → the
+  lid-policy helper with a grace period.
+- **CRTC mismatch (r10):** with the panel disconnected, Hyprland gave a newly plugged front display
+  the internal pipe's CRTC while the kernel had routed it to `dcpext`: every mode was refused, and
+  on lid open the panel found its CRTC taken. → the internal-pipe-first ranking while the lid is
+  closed (r11).
+
+### Open items
+
+- Re-test the move (front display already on `dcpext`) with lid-policy running; suspend/resume and
+  boot with the lid closed.
+- A path meant for boot ("before a compositor started") also runs on a lid close after resume. The
+  display just moves to the internal pipe earlier; to be cleaned up.
+- A late power-off after a quick unplug/replug of the rear display can still drop the new
+  connection.
+- Patches without `Signed-off-by`; no release yet.

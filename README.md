@@ -24,7 +24,7 @@ machine: what works, how we got there, and the state we run every day.
 | Switching the display between the two ports | works both ways without replugging |
 | Second external display at the same time | not possible with the lid open (one external pipeline); the second display waits and the desktop says so |
 | Lid closed, one external display | works ([desktop/lid-open-safety](desktop/lid-open-safety/) covers missed lid-open events) |
-| Lid closed, two external displays | works in a development kernel; clean version in progress ([docs/clamshell.md](docs/clamshell.md)) |
+| Lid closed, two external displays | works in a test kernel with the [lid-policy](desktop/lid-policy/) helper; experimental patches in [kernel/patches-clamshell/](kernel/patches-clamshell/), not in a release yet ([docs/clamshell.md](docs/clamshell.md)) |
 | USB-C data (USB 2/3), Ethernet adapters, hubs, charging | works |
 | Wi-Fi, Bluetooth, suspend (s2idle) | works |
 | Touch ID | not working (no SEP node in the device tree) |
@@ -36,7 +36,7 @@ Details and test criteria: [docs/status.md](docs/status.md).
 | Folder | What |
 |---|---|
 | [install/](install/) | how the machine was installed (Asahi Alarm, Omarchy, Aurora) |
-| [kernel/](kernel/) | the patch series on top of Aurora (12 patches) and the scripts we build it with |
+| [kernel/](kernel/) | the patch series on top of Aurora (12 patches, plus 10 experimental ones for the lid-closed case) and the scripts we build it with |
 | [boot/](boot/) | how our boot.bin is built: m1n1 change and device-tree change, no prebuilt binary |
 | [desktop/](desktop/) | small user services and fixes for Omarchy on this Mac |
 | [docs/](docs/) | status, lid-closed work, upstream reports |

@@ -1,6 +1,6 @@
 # Kernel: external displays on the MacBook Air M3
 
-A 12-patch series on top of the Aurora kernel that drives the T8122 `dcpext` display coprocessor
+A 12-patch series (plus an experimental 10-patch set for the lid-closed case) on top of the Aurora kernel that drives the T8122 `dcpext` display coprocessor
 through both USB-C ports of the J613 (MacBook Air 13" M3).
 
 - **Base:** `omacom/linux-aurora`, branch `integration/aurora`, commit `80ee1e97`.
@@ -30,6 +30,40 @@ through both USB-C ports of the J613 (MacBook Air 13" M3).
 `0001`/`0002` (runtime front-port route, only needed with the stock boot.bin; superseded by
 [boot/](../boot/)), `0003` (opt-in DPE block that makes the M3 GPU start; enable with
 `asahi.t8122_dpe_leak=1`).
+
+## Lid closed with two external displays (`patches-clamshell/`, experimental)
+
+Ten more patches on top of `patches/` that let the **internal** display pipeline drive a second
+external display on the left-front port while the lid is closed, as macOS does
+(background and test results: [../docs/clamshell.md](../docs/clamshell.md)). They are **unsigned
+work in progress** (no `Signed-off-by` yet), tested on one machine with a test kernel (`r11`,
+2026-10-13), and not part of a release.
+
+| # | What |
+|---|---|
+| 0013 | drm/apple: the panel never waits for the internal pipe's Type-C route (needed by any kernel that boots with the new device tree) |
+| 0014 | dts j613: give the internal `dcp` a (disabled) Type-C route to the front port; the front connector gets one endpoint per pipeline |
+| 0015 | drm/apple: tell the internal DCP firmware the lid state (A475) |
+| 0016 | drm/apple: the internal pipe drives a Type-C display while the lid is closed and the panel is off |
+| 0017 | display-gate: enable the internal `dcp`'s route together with `dcpext` |
+| 0018 | drm/apple: the "waits for a pipeline" log line says the display takes over by itself |
+| 0019 | drm/apple: the panel reads disconnected while the lid is closed and is never powered then |
+| 0020 | drm/apple: move the front display to the internal pipe when a rear display needs `dcpext` |
+| 0021 | drm/apple: the panel comes back at once on lid open when its CRTC is already off |
+| 0022 | drm/apple: route the front display to the pipeline the compositor pairs it with (internal pipe first while the lid is closed) |
+
+Apply after `patches/` (`git am ../omarchy-m3-air/kernel/patches-clamshell/*.patch`). The device-tree
+change is patch 0014, so boot.bin has to be rebuilt with the new J613 DTB
+([../boot/](../boot/)). **A kernel without 0013 fails to start the internal panel on that device
+tree**, so put 0013 into every kernel you might boot first. Use it together with
+[../desktop/lid-policy/](../desktop/lid-policy/): without it logind suspends the closed laptop while
+a display moves between pipelines.
+
+Open items: the move of a front display that already sits on `dcpext` (0020) with the lid policy
+running, suspend/resume with the lid closed, booting with the lid closed; a path meant for boot
+("before a compositor started") also runs on a lid close after resume (harmless so far, the display
+just moves earlier); a late power-off after a quick unplug/replug of the rear display can still
+drop the new connection; the 3440x1440 test display renegotiates once after every plug.
 
 ## Building
 

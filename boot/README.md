@@ -31,6 +31,20 @@ to get back.
 The install script refuses to run unless the hashes match our machine. Adapt it consciously or do
 the steps by hand.
 
+## Second step: device tree for the lid-closed case (experimental)
+
+For two external displays with the lid closed ([../docs/clamshell.md](../docs/clamshell.md)) the
+J613 device tree also needs a (disabled) Type-C route from the **internal** `dcp` to the left-front
+port. That change is kernel patch 0014 in [../kernel/patches-clamshell/](../kernel/patches-clamshell/);
+boot.bin is built exactly as above, only with the DTBs (`t8122-j613.dtb`, `t8122-j613-25g83.dtb`)
+from a tree with that patch. `scripts/install-bootbin-clamshell.sh` is what we ran on our machine on
+top of the front-port boot.bin (same pinned m1n1 and `/etc/default/update-m1n1`, only the two DTBs
+change); `scripts/uninstall-bootbin-clamshell.sh` restores the backup.
+
+**Read before installing it:** every kernel you boot with this device tree needs kernel patch 0013.
+Without it the internal DCP refuses the empty route container and the panel stays on the boot
+framebuffer (no appledrm, no external display). Update your fallback kernels first.
+
 ## Notes
 
 - After this, `update-m1n1` (pacman hook) keeps building boot.bin from the pinned files. When

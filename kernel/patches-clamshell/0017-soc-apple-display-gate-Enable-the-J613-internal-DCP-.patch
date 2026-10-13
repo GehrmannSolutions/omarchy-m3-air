@@ -1,0 +1,122 @@
+From 501de744675b8178bada1e9eb96ec5a86df78905 Mon Sep 17 00:00:00 2001
+From: Marius Gehrmann <marius@gehrmann.solutions>
+Date: Tue, 13 Oct 2026 17:16:46 +0200
+Subject: [PATCH 17/22] soc: apple: display gate: Enable the J613 internal
+ DCP's route with dcpext
+
+The J613 device tree gives the internal DCP a disabled Type-C route to
+the left-front port, the second pipeline for a display there with the
+lid closed. It leads to a port that dcpext drives too, and the display
+driver only uses it while dcpext runs alongside, so it is usable exactly
+when dcpext is.
+
+Enable the internal DCP's routes in the changeset that enables dcpext
+and its own routes, with one more log line:
+
+  enabled the Type-C routes of /soc/dcp@28ec00000 with it, for a
+  second external display with the lid closed
+
+Without dcpext (no firmware reserved, other firmware, refused checks,
+apple_t8122_display.dcpext=0) the route stays disabled, and the internal
+DCP has no route. Device trees without such a route are unchanged.
+
+Assisted-by: Claude:claude-opus-5-5
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_017YMqWu7A3VwEYtHaA1TusK
+---
+ drivers/soc/apple/t6030-display-gate.c | 25 ++++++++++++++++++++-----
+ 1 file changed, 20 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/soc/apple/t6030-display-gate.c b/drivers/soc/apple/t6030-display-gate.c
+index c4bf5cca4..d76553033 100644
+--- a/drivers/soc/apple/t6030-display-gate.c
++++ b/drivers/soc/apple/t6030-display-gate.c
+@@ -1282,6 +1282,12 @@ static void __init gate_dcpext(const char *refuse)
+  * the marker, with other firmware, or if anything does not check out, the
+  * node and its routes stay disabled. apple_t8122_display.dcpext=0 keeps them
+  * disabled too.
++ *
++ * The same changeset enables the Type-C routes the device tree gives the
++ * internal DCP (J613: to the left-front port, for the second external display
++ * with the lid closed). They lead to ports that dcpext drives too, and only
++ * the display driver's lid handling makes them usable; without dcpext they
++ * stay disabled.
+  */
+ static bool gate_t8122_dcpext_requested __initdata = true;
+ 
+@@ -1296,10 +1302,11 @@ static bool __init gate_available(struct device_node *np)
+ 	return np && of_device_is_available(np);
+ }
+ 
+-static void __init gate_t8122_dcpext_one(struct device_node *np)
++static void __init gate_t8122_dcpext_one(struct device_node *np, struct device_node *dcp)
+ {
+ 	struct device_node *dart = NULL, *mbox = NULL, *piodma = NULL;
+ 	struct device_node *disp_dart = NULL, *ps = NULL, *entry = NULL;
++	struct device_node *dcp_routes = NULL;
+ 	struct of_changeset *cs;
+ 	const char *label, *pmp_note;
+ 	bool pmp_request = false;
+@@ -1354,6 +1361,7 @@ static void __init gate_t8122_dcpext_one(struct device_node *np)
+ 		pmp_note = "PMP DISPEXT request";
+ 	}
+ 
++	dcp_routes = of_get_child_by_name(dcp, "typec-routes");
+ 	cs = gate_cs_alloc();
+ 	if (!cs) {
+ 		gate_ext_refuse(np, "out of memory");
+@@ -1370,6 +1378,8 @@ static void __init gate_t8122_dcpext_one(struct device_node *np)
+ 		ret = of_changeset_update_prop_string(cs, np, "status", "okay");
+ 	if (!ret)
+ 		ret = gate_ext_routes(cs, np, "okay");
++	if (!ret && dcp_routes)
++		ret = gate_ext_routes(cs, dcp, "okay");
+ 	if (!ret)
+ 		ret = gate_display_add_dart(cs, disp_dart);
+ 	if (!ret)
+@@ -1382,7 +1392,11 @@ static void __init gate_t8122_dcpext_one(struct device_node *np)
+ 	}
+ 	gate_info("enabled %pOF with its Type-C routes, display DART %pOF, CPU power floor and %s; started by the display driver\n",
+ 		  np, disp_dart, pmp_note);
++	if (dcp_routes)
++		gate_info("enabled the Type-C routes of %pOF with it, for a second external display with the lid closed\n",
++			  dcp);
+ put:
++	of_node_put(dcp_routes);
+ 	of_node_put(entry);
+ 	of_node_put(ps);
+ 	of_node_put(disp_dart);
+@@ -1391,17 +1405,18 @@ static void __init gate_t8122_dcpext_one(struct device_node *np)
+ 	of_node_put(dart);
+ }
+ 
+-static void __init gate_t8122_dcpext(bool panel)
++/* @dcp: the internal DCP, if the internal display was handed over. */
++static void __init gate_t8122_dcpext(struct device_node *dcp)
+ {
+ 	struct device_node *np;
+ 
+ 	for_each_compatible_node(np, NULL, "apple,t8122-dcpext") {
+-		if (!panel)
++		if (!dcp)
+ 			gate_ext_refuse(np, "the internal display was not handed over");
+ 		else if (!gate_t8122_dcpext_requested)
+ 			gate_ext_refuse(np, "disabled on the command line");
+ 		else
+-			gate_t8122_dcpext_one(np);
++			gate_t8122_dcpext_one(np, dcp);
+ 	}
+ }
+ 
+@@ -1447,7 +1462,7 @@ static int __init apple_t6030_display_gate(void)
+ 	if (gate_soc->dcpext)
+ 		gate_dcpext(panel ? NULL : "the internal display was not handed over");
+ 	if (gate_soc == &gate_t8122)
+-		gate_t8122_dcpext(panel);
++		gate_t8122_dcpext(panel ? np[GATE_DCP] : NULL);
+ 	of_node_put(aic);
+ 	for (i = 0; i < PMP_PS_NR; i++)
+ 		of_node_put(ps[i]);
+-- 
+2.56.0
+
