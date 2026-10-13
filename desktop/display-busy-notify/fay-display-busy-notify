@@ -2,22 +2,33 @@
 # SPDX-FileCopyrightText: 2026 Marius Gehrmann
 # SPDX-License-Identifier: MIT
 # Fay (2026-10-13): desktop hint when a second external display has to wait.
-# The M3 MacBook Air drives one external display at a time. A second one stays
-# dark; switching works by unplugging the first one and plugging the waiting
-# one in again. The kernel says so ("... waits for an external display
-# pipeline ...", appledrm), older kernels only log the USB-C controller's -EBUSY.
+# The M3 MacBook Air drives one external display at a time with the lid open. A
+# second one stays dark. With the Phase-2 kernel it turns on by itself when the
+# lid closes (the internal pipe then drives one of them) or when the first one
+# is unplugged; the kernel says "... waits for an external display pipeline ...;
+# unplug that one and this one takes over" (appledrm). The v2 kernel says "to
+# switch, unplug that one, then plug this one in again"; older kernels only log
+# the USB-C controller's -EBUSY. Texts in English (2026-10-13, Marius).
 # Runs as the user service fay-display-busy-notify.service.
 set -uo pipefail
 
 last=0
 journalctl -k -f -n 0 -o cat | while IFS= read -r line; do
   case $line in
+    *"waits for an external display pipeline"*"takes over"*)
+      # Phase-2 kernel: with the lid closed the internal pipe drives a second display
+      port=${line#*display on }
+      port=${port%% waits*}
+      hint="With the lid open, this Mac drives one external display at a time. This one turns on when you close the lid (then both work) or when you unplug the other one."
+      ;;
     *"waits for an external display pipeline"*)
       port=${line#*display on }
       port=${port%% waits*}
+      hint="This Mac drives one external display at a time. To switch, unplug the other one, then plug this one in again."
       ;;
     *"sn201202x"*"failed to configure Type-C connection: -16"*)
       port=""
+      hint="This Mac drives one external display at a time. To switch, unplug the other one, then plug this one in again."
       ;;
     *) continue ;;
   esac
@@ -26,7 +37,7 @@ journalctl -k -f -n 0 -o cat | while IFS= read -r line; do
   (( now - last < 20 )) && continue
   last=$now
   omarchy-notification-send -g 󰍹 -u normal \
-    "Nur ein externer Monitor gleichzeitig" \
-    "${port:+$port: }Dieser Monitor bleibt aus, solange der andere angeschlossen ist. Zum Wechseln den anderen abziehen und diesen neu einstecken." \
+    "External display waiting" \
+    "${port:+$port: }$hint" \
     >/dev/null 2>&1 || true
 done
