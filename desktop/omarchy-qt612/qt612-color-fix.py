@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 Marius Gehrmann
+# SPDX-License-Identifier: MIT
 """Qualify omarchy's Color singleton as Commons.Color (Qt 6.12 shadows bare `Color`).
 Same pattern as omacom/omarchy PR #14553. Usage: qt612-color-fix.py [--write] DIR..."""
 import re, sys, pathlib

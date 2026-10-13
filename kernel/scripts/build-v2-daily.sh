@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Marius Gehrmann
+# SPDX-License-Identifier: MIT
 # Fay: build the daily kernel from the consolidated series v2 + the local DPE block
 # (branch fay/aurora-j613-dp-v2-daily) into build-v2/stage-v2, kernel release 7.1.12-fay-v2.
 set -uo pipefail

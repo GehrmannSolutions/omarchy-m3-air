@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Marius Gehrmann
+# SPDX-License-Identifier: MIT
 # Fay (2026-10-13): safety net for Omarchy's lid-open handling.
 # On this MacBook Air the Hyprland bind "switch:off:Apple SMC power/lid events"
 # -> omarchy-hyprland-monitor-clamshell sometimes does nothing when the lid opens

@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Marius Gehrmann
+# SPDX-License-Identifier: MIT
 # Undo install-bootbin-front.sh: previous boot.bin and /etc/default/update-m1n1 back,
 # pinned sources in /usr/local/lib/fay-boot removed (or the previous ones restored).
 set -euo pipefail

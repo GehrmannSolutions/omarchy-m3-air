@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Marius Gehrmann
+# SPDX-License-Identifier: MIT
 [Unit]
 Description=Fay: hint when a second external display has to wait
 PartOf=graphical-session.target

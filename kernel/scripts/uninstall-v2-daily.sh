@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Marius Gehrmann
+# SPDX-License-Identifier: MIT
 # Undo install-v2-daily.sh: fay-daily boots fay-ext2 again; the fay-v2 kernel, initramfs,
 # modules and mkinitcpio snippet are removed. Run from a kernel other than fay-v2.
 set -euo pipefail

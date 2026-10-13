@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Marius Gehrmann
+# SPDX-License-Identifier: MIT
 # Fay (2026-10-13): desktop hint when a second external display has to wait.
 # The M3 MacBook Air drives one external display at a time. A second one stays
 # dark; switching works by unplugging the first one and plugging the waiting

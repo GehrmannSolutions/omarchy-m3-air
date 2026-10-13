@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Marius Gehrmann
+# SPDX-License-Identifier: MIT
 # Fay (2026-10-13), decision A in agents/fay/plans/2026-10-13-DECISION-boot-dt.md:
 # 1. boot.bin gets the J613 device trees with the left-front USB-C port (dcpext
 #    route@1, ATC1 crossbar). Same m1n1, same u-boot, same /etc/m1n1.conf

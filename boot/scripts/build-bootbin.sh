@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Marius Gehrmann
+# SPDX-License-Identifier: MIT
 # Builds an m1n1 stage-2 boot.bin exactly as /usr/bin/update-m1n1 does
 # (m1n1.bin + DTBs + gzipped u-boot + the chosen.*/display=/mitigations= lines
 # of /etc/m1n1.conf), writing only to OUT. Needs no root.

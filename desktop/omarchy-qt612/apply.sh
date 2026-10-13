@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Marius Gehrmann
+# SPDX-License-Identifier: MIT
 # Fix the Omarchy shell for Qt 6.12 (QtQuick's new Color type shadows omarchy's Color
 # singleton -> bar/menus/lock/polkit colors undefined). Same change as omacom/omarchy PR #14553,
 # applied to the installed /usr/share/omarchy/shell. A later omarchy package update replaces it.

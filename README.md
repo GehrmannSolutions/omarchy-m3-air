@@ -47,6 +47,23 @@ Details and test criteria: [docs/status.md](docs/status.md).
 Releases are snapshots of a state that ran on the machine. The first ones are source only (patches,
 recipes, scripts); later ones may add a packaged kernel. There will be no prebuilt boot.bin.
 
+## License
+
+Our own scripts, units and documentation are under the [MIT license](LICENSE) unless a file says
+otherwise (scripts carry `SPDX-License-Identifier` headers). Patches stay under the license of the
+project and file they change; the full texts are in [LICENSES/](LICENSES/):
+
+| Files | License |
+|---|---|
+| everything we wrote (scripts, systemd units, READMEs, docs) | MIT |
+| `kernel/patches*/`, kernel diffs in `archive/` (drivers) | GPL-2.0-only OR MIT, as the changed files in `drivers/gpu/drm/apple`, `drivers/soc/apple`, `drivers/pmdomain/apple` |
+| device-tree patches (`kernel/patches/0002`, `0003`, `boot/j613-front-route.dts.patch`) | GPL-2.0-or-later OR MIT, as `arch/arm64/boot/dts/apple/` |
+| other Linux kernel changes in `archive/` (e.g. `drivers/usb/typec/tipd`, `drivers/iommu`) | GPL-2.0-only, as the Linux kernel |
+| `boot/m1n1-aurora-t8122-dcpext.patch`, m1n1 drafts in `archive/` | MIT, as m1n1 |
+| `archive/02-fay-dcp-kernel/aquamarine/` | BSD-3-Clause, as aquamarine |
+
+The files in `archive/` were left unchanged and carry no headers; the table above applies to them.
+
 ## Credits
 
 Built on the work of the Asahi Linux project (m1n1, kernel drivers, installer), the Aurora kernel

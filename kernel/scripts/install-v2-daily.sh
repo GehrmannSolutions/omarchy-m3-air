@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Marius Gehrmann
+# SPDX-License-Identifier: MIT
 # Fay (2026-10-13): make the consolidated series v2 the daily kernel.
 # Kernel 7.1.12-fay-v2 (branch fay/aurora-j613-dp-v2-daily = the 12 v2 patches + the local DPE
 # block for the GPU, build-v2/stage-v2) is installed side by side:
