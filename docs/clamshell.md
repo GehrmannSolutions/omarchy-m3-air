@@ -12,12 +12,19 @@ both external displays showed a picture in 6 of 6 lid-close cycles (first frame 
 and the panel came back on lid open. Remaining remarks in the log: the modeset is sent before the
 crossbar is active ("Modeset done, but pipe not enabled"), and timings are set twice.
 
-## Phase 2 (works in a test kernel, 2026-10-13)
+## Phase 2 (works, in our daily kernel since 2026-10-14)
 
-The same behaviour as a clean set on top of the series:
-[../kernel/patches-clamshell/](../kernel/patches-clamshell/) (patches 0013–0022, unsigned work in
+The same behaviour as a set on top of the series:
+[../kernel/patches-clamshell/](../kernel/patches-clamshell/) (patches 0013–0023, unsigned work in
 progress), the device tree from that set in boot.bin ([../boot/](../boot/)), and the desktop helper
 [../desktop/lid-policy/](../desktop/lid-policy/).
+
+**Next (2026-10-14):** `patches-clamshell/` is the r12 state and still records how it got there (later
+patches rework earlier ones). It is being consolidated into six patches on top of the maintainer's
+version of the series ([omacom/linux-aurora#114](https://github.com/omacom/linux-aurora/pull/114)),
+in its style: the new route is described but disabled in the device tree and turned on only by the
+display gate, behind the boot loader's marker. Then another test round and sign-off; it will be
+offered upstream only after #114 has landed.
 
 ### How it works
 

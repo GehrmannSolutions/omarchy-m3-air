@@ -42,6 +42,7 @@ external display on the left-front port while the lid is closed, as macOS does
 (background and test results: [../docs/clamshell.md](../docs/clamshell.md)). They are **unsigned
 work in progress** (no `Signed-off-by` yet), tested on one machine with the test kernel `r12` (2026-10-13/14: all lid-closed tests
 passed, see the docs) and in our daily kernel since 2026-10-14, and not part of a release.
+They are being consolidated into six patches on top of #114 ([../docs/clamshell.md](../docs/clamshell.md)).
 
 | # | What |
 |---|---|
