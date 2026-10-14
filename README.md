@@ -14,7 +14,7 @@ machine: what works, how we got there, and the state we run every day.
 > m1n1, whose policies forbid AI-assisted contributions. Upstream reports go only to projects that
 > accept disclosed AI-assisted work (see [docs/upstream.md](docs/upstream.md)).
 
-## Status (2026-10-13)
+## Status (2026-10-14)
 
 | Area | Status |
 |---|---|
@@ -24,9 +24,10 @@ machine: what works, how we got there, and the state we run every day.
 | Switching the display between the two ports | works both ways without replugging |
 | Second external display at the same time | not possible with the lid open (one external pipeline); the second display waits and the desktop says so |
 | Lid closed, one external display | works ([desktop/lid-open-safety](desktop/lid-open-safety/) covers missed lid-open events) |
-| Lid closed, two external displays | works in a test kernel with the [lid-policy](desktop/lid-policy/) helper; experimental patches in [kernel/patches-clamshell/](kernel/patches-clamshell/), not in a release yet ([docs/clamshell.md](docs/clamshell.md)) |
+| Lid closed, two external displays | works in our daily kernel with the [lid-policy](desktop/lid-policy/) helper; experimental patches in [kernel/patches-clamshell/](kernel/patches-clamshell/), not in a release yet ([docs/clamshell.md](docs/clamshell.md)) |
 | USB-C data (USB 2/3), Ethernet adapters, hubs, charging | works |
-| Wi-Fi, Bluetooth, suspend (s2idle) | works |
+| Wi-Fi, Bluetooth, suspend (s2idle) | works (Bluetooth logs a few command timeouts when entering suspend) |
+| Panel brightness keys | not working: no backlight control on the 14.x firmware path ([omacom/linux-aurora#32](https://github.com/omacom/linux-aurora/issues/32)) |
 | Touch ID | not working (no SEP node in the device tree) |
 
 Details and test criteria: [docs/status.md](docs/status.md).

@@ -7,7 +7,11 @@ through both USB-C ports of the J613 (MacBook Air 13" M3).
   Also applies cleanly to `67d8e916` (not built there).
 - **Git branch:** [`GehrmannSolutions/linux-aurora` `fay/aurora-j613-dp-v2`](https://github.com/GehrmannSolutions/linux-aurora/tree/fay/aurora-j613-dp-v2)
   (same patches, review in [PR #1 there](https://github.com/GehrmannSolutions/linux-aurora/pull/1)).
-- **Kernel release we run:** `7.1.12-fay-v2`.
+- **Upstream:** the maintainer carries the 12 patches, reworked, as draft
+  [omacom/linux-aurora#114](https://github.com/omacom/linux-aurora/pull/114): there the kernel turns
+  `dcpext` on only when m1n1 sets `apple,t8122-dcpext-firmware-ready` ([../boot/](../boot/)).
+- **Kernel release we run:** `7.1.12-fay-v2` = `patches/` + `patches-clamshell/` + `patches-local/0003`
+  (since 2026-10-14).
 
 ## Patches (`patches/`)
 
@@ -37,7 +41,7 @@ Eleven more patches on top of `patches/` that let the **internal** display pipel
 external display on the left-front port while the lid is closed, as macOS does
 (background and test results: [../docs/clamshell.md](../docs/clamshell.md)). They are **unsigned
 work in progress** (no `Signed-off-by` yet), tested on one machine with the test kernel `r12` (2026-10-13/14: all lid-closed tests
-passed, see the docs), and not part of a release.
+passed, see the docs) and in our daily kernel since 2026-10-14, and not part of a release.
 
 | # | What |
 |---|---|

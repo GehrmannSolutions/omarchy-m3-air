@@ -1,6 +1,7 @@
-# Status and test criteria (2026-10-13)
+# Status and test criteria (2026-10-14)
 
-Kernel `7.1.12-fay-v2` ([../kernel/](../kernel/)) with our boot.bin device tree ([../boot/](../boot/)).
+Kernel `7.1.12-fay-v2` ([../kernel/](../kernel/)): since 2026-10-14 the 12-patch series, the lid-closed set
+(`patches-clamshell/`) and the local GPU patch, with our boot.bin device tree ([../boot/](../boot/)).
 Test displays: a 3440x1440 ultrawide with a USB hub (60 Hz over two DP lanes) and a portable 1080p
 display. "Rear" = rear-left USB-C port, "front" = left-front USB-C port.
 
@@ -13,15 +14,17 @@ display. "Rear" = rear-left USB-C port, "front" = left-front USB-C port.
 | K5 | Switch front → rear (unplug, plug) | ✅ twice without replugging |
 | K6 | Switch rear → front | ✅ twice without replugging |
 | K7 | After a failed plug, a replugged display comes back without a reboot | ✅ |
-| K8 | Lid closed, two external displays | 🟡 works in the test kernel r12 (all lid-closed tests passed) with [desktop/lid-policy](../desktop/lid-policy/), not in a release yet ([clamshell.md](clamshell.md)) |
+| K8 | Lid closed, two external displays | ✅ in our daily kernel since 2026-10-14 (all lid-closed tests passed on r12) with [desktop/lid-policy](../desktop/lid-policy/); experimental, not in a release yet ([clamshell.md](clamshell.md)) |
 | K9 | No soft lockups, RCU stalls or "failed to acknowledge" | ✅ |
-| K10 | Panel after a lid-closed boot + suspend | ❌ dark once on the development kernel; not yet tested on v2 |
-| K11 | Screen is locked before suspend | 🟡 3 of 9 suspends unlocked on 10-11/12, the last three were fine |
+| K10 | Panel after a lid-closed boot + suspend | ✅ r12: lid-closed boot, lid opened hours later, panel on |
+| K11 | Screen is locked before suspend | 🟡 3 of 9 suspends unlocked on 10-11/12; once more on 10-13 while the shell's lock state was stuck (fixed by restarting the shell) |
 | K12 | Front-port USB controller stays clean while a second display is refused | ✅ |
 | K13 | Series: checkpatch clean (except trailers), W=1 clean | ✅ |
 | K14 | PMP record-bit unit tests | ✅ 10/10 (user-space shim) |
-| K15 | Reported upstream | 🟡 issues filed, see [upstream.md](upstream.md) |
+| K15 | Reported upstream | 🟡 the 12-patch series is carried as draft [omacom/linux-aurora#114](https://github.com/omacom/linux-aurora/pull/114); both requested test boots passed (2026-10-14); the m1n1 part is open, see [upstream.md](upstream.md) |
 | K16 | Room in /boot for the next kernel | ✅ |
+| K17 | Panel brightness keys | ❌ never worked: no backlight device on the 14.x firmware path ([omacom/linux-aurora#32](https://github.com/omacom/linux-aurora/issues/32)) |
+| K18 | No Bluetooth timeouts when entering suspend | ❌ a few `hci0: command 0x0c01 tx timeout` on every lid-open suspend; Bluetooth stays on |
 
 ## Known limits
 
@@ -32,5 +35,6 @@ display. "Rear" = rear-left USB-C port, "front" = left-front USB-C port.
 - Omarchy sometimes misses a lid-open event: [desktop/lid-open-safety](../desktop/lid-open-safety/).
 - When the desktop blanks the screens (DPMS off, e.g. on the lock screen), the internal panel goes
   black but keeps its backlight on (since the first Omarchy start on this Mac).
+- Brightness keys do nothing (K17); the panel keeps the brightness the firmware chose at power-on.
 - Booting with the lid closed: nothing is shown on external displays before the desktop starts, so a
   disk-encryption password prompt is not visible; open the lid to type it.
