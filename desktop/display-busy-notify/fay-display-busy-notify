@@ -6,9 +6,11 @@
 # second one stays dark. With the Phase-2 kernel it turns on by itself when the
 # lid closes (the internal pipe then drives one of them) or when the first one
 # is unplugged; the kernel says "... waits for an external display pipeline ...;
-# unplug that one and this one takes over" (appledrm). The v2 kernel says "to
-# switch, unplug that one, then plug this one in again"; older kernels only log
-# the USB-C controller's -EBUSY. Texts in English (2026-10-13, Marius).
+# unplug that one and this one takes over" (appledrm). The v2 kernel (and
+# omacom/linux-aurora#114) still says "to switch, unplug that one, then plug this
+# one in again", but there too the waiting display takes over by itself once the
+# other one is unplugged (tested 2026-10-14). Older kernels only log the USB-C
+# controller's -EBUSY. Texts in English (2026-10-13, Marius).
 # Runs as the user service fay-display-busy-notify.service.
 set -uo pipefail
 
@@ -22,9 +24,10 @@ journalctl -k -f -n 0 -o cat | while IFS= read -r line; do
       hint="With the lid open, this Mac drives one external display at a time. This one turns on when you close the lid (then both work) or when you unplug the other one."
       ;;
     *"waits for an external display pipeline"*)
+      # v2 kernel: the waiting display takes over by itself when the other one goes
       port=${line#*display on }
       port=${port%% waits*}
-      hint="This Mac drives one external display at a time. To switch, unplug the other one, then plug this one in again."
+      hint="This Mac drives one external display at a time. This one turns on when you unplug the other one."
       ;;
     *"sn201202x"*"failed to configure Type-C connection: -16"*)
       port=""

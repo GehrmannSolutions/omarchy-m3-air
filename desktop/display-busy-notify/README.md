@@ -10,4 +10,5 @@ Notification texts (English since 2026-10-13):
 | Kernel | Text |
 |---|---|
 | clamshell set (`kernel/patches-clamshell/`, "… unplug that one and this one takes over") | "With the lid open, this Mac drives one external display at a time. This one turns on when you close the lid (then both work) or when you unplug the other one." |
-| v2 series or older | "This Mac drives one external display at a time. To switch, unplug the other one, then plug this one in again." |
+| v2 series (also omacom/linux-aurora#114: "… then plug this one in again") | "This Mac drives one external display at a time. This one turns on when you unplug the other one." |
+| older kernels (only the USB-C controller's -EBUSY) | "This Mac drives one external display at a time. To switch, unplug the other one, then plug this one in again." |
