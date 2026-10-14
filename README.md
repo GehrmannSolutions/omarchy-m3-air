@@ -29,6 +29,8 @@ machine: what works, how we got there, and the state we run every day.
 | Wi-Fi, Bluetooth, suspend (s2idle) | works (Bluetooth logs a few command timeouts when entering suspend) |
 | Panel brightness keys | not working: no backlight control on the 14.x firmware path ([omacom/linux-aurora#32](https://github.com/omacom/linux-aurora/issues/32)) |
 | Touch ID | not working (no SEP node in the device tree) |
+| CPU temperature limit | works since 2026-10-14 with thermal zones in our boot.bin device tree; before, nothing throttled and the P cores reached 111 C ([docs/power-and-thermal.md](docs/power-and-thermal.md)) |
+| Battery life | about 7 h of mixed use, about 9 h idle with the screen on; GPU capped at 618 MHz for now ([docs/power-and-thermal.md](docs/power-and-thermal.md)) |
 
 Details and test criteria: [docs/status.md](docs/status.md).
 
@@ -40,7 +42,7 @@ Details and test criteria: [docs/status.md](docs/status.md).
 | [kernel/](kernel/) | the patch series on top of Aurora (12 patches, plus 10 experimental ones for the lid-closed case) and the scripts we build it with |
 | [boot/](boot/) | how our boot.bin is built: m1n1 change and device-tree change, no prebuilt binary |
 | [desktop/](desktop/) | small user services and fixes for Omarchy on this Mac |
-| [docs/](docs/) | status, lid-closed work, upstream reports |
+| [docs/](docs/) | status, lid-closed work, power and temperatures, upstream reports |
 | [archive/](archive/) | the first attempts before the Aurora kernel (2026-10-02 to 10-11), kept as they were |
 
 ## Releases

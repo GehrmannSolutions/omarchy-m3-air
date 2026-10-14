@@ -26,6 +26,7 @@ display. "Rear" = rear-left USB-C port, "front" = left-front USB-C port.
 | K16 | Room in /boot for the next kernel | ✅ |
 | K17 | Panel brightness keys | ❌ never worked: no backlight device on the 14.x firmware path ([omacom/linux-aurora#32](https://github.com/omacom/linux-aurora/issues/32)) |
 | K18 | No Bluetooth timeouts when entering suspend | ❌ a few `hci0: command 0x0c01 tx timeout` on every lid-open suspend; Bluetooth stays on |
+| K19 | CPU temperature limited under sustained load | ✅ since 2026-10-14: six CPU thermal zones in the boot.bin device tree hold about 92 C (P cores 2.2-3.0 GHz); before, nothing throttled and the die reached 111 C ([power-and-thermal.md](power-and-thermal.md)) |
 
 ## Known limits
 
@@ -37,5 +38,7 @@ display. "Rear" = rear-left USB-C port, "front" = left-front USB-C port.
 - When the desktop blanks the screens (DPMS off, e.g. on the lock screen), the internal panel goes
   black but keeps its backlight on (since the first Omarchy start on this Mac).
 - Brightness keys do nothing (K17); the panel keeps the brightness the firmware chose at power-on.
+- The GPU runs at most 618 MHz (state 2 of 8): its driver has no SoC die temperature zone on J613
+  yet ([power-and-thermal.md](power-and-thermal.md)).
 - Booting with the lid closed: nothing is shown on external displays before the desktop starts, so a
   disk-encryption password prompt is not visible; open the lid to type it.
