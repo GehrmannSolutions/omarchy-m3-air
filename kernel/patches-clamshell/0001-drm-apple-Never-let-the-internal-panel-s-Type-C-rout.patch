@@ -1,18 +1,19 @@
-From 36f3cb94171c810e002259586f66af0b200dd043 Mon Sep 17 00:00:00 2001
+From 49857becbd1091cf12ae47c29bc64f6a4f0121bb Mon Sep 17 00:00:00 2001
 From: Marius Gehrmann <marius@gehrmann.solutions>
 Date: Tue, 13 Oct 2026 17:03:43 +0200
-Subject: [PATCH 13/22] drm: apple: Never let the internal panel's Type-C route
+Subject: [PATCH 1/6] drm: apple: Never let the internal panel's Type-C route
  hold up the panel
 
 On J613 the internal DCP gets a Type-C display route to the left-front
 USB-C port in the device tree: with the lid closed and the panel off,
 its pipe can drive a second external display, as on macOS. The route
 stays disabled there; the display gate enables it at boot together with
-the dcpext. Without the gate (the dcpext not started, the 26.6 profile
-that includes the J613 device tree, or a kernel that does not know the
-route), the processor has a typec-routes container with no enabled
-route, which made route registration fail with "Type-C route container
-is empty" and took the panel down with it.
+dcpext. When the gate does not (no boot-loader marker, a refused check,
+apple_t8122_display.dcpext=0, the 26.6 profile that includes the J613
+device tree, or a kernel that does not know the route), the processor
+has a typec-routes container with no enabled route, which made route
+registration fail with "Type-C route container is empty" and took the
+panel down with it.
 
 - A typec-routes container without an enabled route means no route, for
   every processor but the external ones (T6030 and T8122 dcpext, whose
@@ -26,6 +27,7 @@ Device trees whose routes are enabled are unchanged.
 Assisted-by: Claude:claude-opus-5-5
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_017YMqWu7A3VwEYtHaA1TusK
+Signed-off-by: Marius Gehrmann <marius@gehrmann.solutions>
 ---
  drivers/gpu/drm/apple/dcp-fabric.c   |  9 +++++++++
  drivers/gpu/drm/apple/dcp-internal.h | 10 ++++++++++
@@ -33,10 +35,10 @@ Claude-Session: https://claude.ai/code/session_017YMqWu7A3VwEYtHaA1TusK
  3 files changed, 28 insertions(+), 4 deletions(-)
 
 diff --git a/drivers/gpu/drm/apple/dcp-fabric.c b/drivers/gpu/drm/apple/dcp-fabric.c
-index 117d38373..883429eff 100644
+index 52e409518..37b2f307f 100644
 --- a/drivers/gpu/drm/apple/dcp-fabric.c
 +++ b/drivers/gpu/drm/apple/dcp-fabric.c
-@@ -3494,6 +3494,15 @@ int dcp_register_typec_routes(struct apple_dcp *dcp)
+@@ -3506,6 +3506,15 @@ int dcp_register_typec_routes(struct apple_dcp *dcp)
  		of_get_child_by_name(dcp->dev->of_node, "typec-routes");
  	struct dcp_route_probe_context ctx = { .dcp = dcp, .routes = routes };
  
@@ -74,10 +76,10 @@ index e5e40af46..bd9cca0ad 100644
   * The T8122 dcpext connects its DPTX port as AsahiLinux/linux#607 does,
   * the kernel this firmware was first driven with: no validation of the
 diff --git a/drivers/gpu/drm/apple/dcp.c b/drivers/gpu/drm/apple/dcp.c
-index 615704828..4d8a1b44c 100644
+index 336457840..4746381a2 100644
 --- a/drivers/gpu/drm/apple/dcp.c
 +++ b/drivers/gpu/drm/apple/dcp.c
-@@ -2413,19 +2413,24 @@ static int dcp_fixed_output_error(struct apple_dcp *dcp, int err, const char *wh
+@@ -2421,19 +2421,24 @@ static int dcp_fixed_output_error(struct apple_dcp *dcp, int err, const char *wh
   * A T6030 external processor whose Type-C routes did not register: disable
   * them in the device tree so that the ports stop waiting for them, and add
   * the processor to the DRM device as a pipe that never starts, so that the

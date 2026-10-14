@@ -11,12 +11,17 @@ to get back.
 
 ## What changes
 
-- `m1n1-aurora-t8122-dcpext.patch` (against the Aurora m1n1 `d05ba17d`): m1n1 reserves the
-  `dcpext` firmware and enables the node on T8122, as it already does on T8112. Not submitted to
-  m1n1 (Asahi does not accept AI-assisted contributions).
-- `j613-front-route.dts.patch`: the J613 device-tree source gets the left-front USB-C port as a
-  second `dcpext` route (ATC1 crossbar). Kernel patches 0002/0003 in [../kernel/](../kernel/) add
-  the rest of `dcpext`.
+- `m1n1-aurora-t8122-dcpext.patch` (against the Aurora m1n1 `d05ba17d`): on T8122 m1n1 reserves the
+  `dcpext` firmware and sets its firmware version, leaves the node **disabled** and marks it
+  `apple,t8122-dcpext-firmware-ready = <1>`. The kernel's display gate enables `dcpext`, its
+  DARTs, mailbox, crossbars and routes only when it finds that marker, so a kernel that cannot
+  drive `dcpext` never sees it. m1n1 enables nothing else. Not submitted to m1n1 (its rules do not
+  accept AI-assisted contributions; we asked the Aurora maintainers how to handle that).
+- The device trees come from the kernel tree: since 2026-10-14 from
+  [omacom/linux-aurora#114](https://github.com/omacom/linux-aurora/pull/114) plus kernel patch 0002
+  of [../kernel/patches-clamshell/](../kernel/patches-clamshell/). #114 already wires `dcpext` to
+  both USB-C ports, so `j613-front-route.dts.patch` (our earlier front-port route for the
+  `patches/` series) is kept only for that older series.
 
 ## How we build and install it (`scripts/`)
 
@@ -31,19 +36,18 @@ to get back.
 The install script refuses to run unless the hashes match our machine. Adapt it consciously or do
 the steps by hand.
 
-## Second step: device tree for the lid-closed case (experimental)
+## Our current boot.bin (2026-10-14)
 
-For two external displays with the lid closed ([../docs/clamshell.md](../docs/clamshell.md)) the
-J613 device tree also needs a (disabled) Type-C route from the **internal** `dcp` to the left-front
-port. That change is kernel patch 0014 in [../kernel/patches-clamshell/](../kernel/patches-clamshell/);
-boot.bin is built exactly as above, only with the DTBs (`t8122-j613.dtb`, `t8122-j613-25g83.dtb`)
-from a tree with that patch. `scripts/install-bootbin-clamshell.sh` is what we ran on our machine on
-top of the front-port boot.bin (same pinned m1n1 and `/etc/default/update-m1n1`, only the two DTBs
-change); `scripts/uninstall-bootbin-clamshell.sh` restores the backup.
+Our m1n1 (patch above) + every DTB built from #114 + `patches-clamshell/`, built with
+`scripts/build-bootbin-c114.sh`, installed with `scripts/install-bootbin-c114.sh` (same pinned
+`/usr/local/lib/fay-boot` and `/etc/default/update-m1n1`; backup and hash checks as above);
+`scripts/uninstall-bootbin-c114.sh` restores the backup. In these device trees `dcpext`, its DARTs,
+mailbox and crossbars, and the internal `dcp`'s new route are all disabled; the gate turns them on.
 
-**Read before installing it:** every kernel you boot with this device tree needs kernel patch 0013.
-Without it the internal DCP refuses the empty route container and the panel stays on the boot
-framebuffer (no appledrm, no external display). Update your fallback kernels first.
+**Read before installing it:** every kernel you boot with this device tree needs kernel patch 0001
+of `patches-clamshell/` (without it the internal DCP refuses the empty route container and the
+panel stays on the boot framebuffer) and #114's gate (without it no external display). The
+`install-bootbin-clamshell.sh`/`-front.sh` scripts are the earlier steps for the `patches/` series.
 
 ## Notes
 

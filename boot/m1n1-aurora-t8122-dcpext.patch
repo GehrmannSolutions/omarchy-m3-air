@@ -1,8 +1,39 @@
-diff --git i/src/kboot.c w/src/kboot.c
-index 70f1d99b..92d3fcac 100644
---- i/src/kboot.c
-+++ w/src/kboot.c
-@@ -2153,7 +2153,14 @@ static int dt_set_display(void)
+diff --git a/src/kboot.c b/src/kboot.c
+index 70f1d99b..555a8082 100644
+--- a/src/kboot.c
++++ b/src/kboot.c
+@@ -1967,7 +1967,14 @@ static const char dcpext_aliases[][8] = {
+     "dcpext4", "dcpext5", "dcpext6", "dcpext7",
+ };
+ 
+-static int dt_reserve_dcpext_firmware(void)
++/*
++ * @enable: set the node's status to okay (t8112, t602x). On t8122 the node
++ * stays disabled and is marked apple,t8122-dcpext-firmware-ready = <1>
++ * instead: the kernel's display gate enables it (and its Type-C route) only
++ * after the internal display handoff, and only if it can drive it, so a
++ * kernel without dcpext support never sees it and keeps the internal panel.
++ */
++static int dt_reserve_dcpext_firmware(bool enable)
+ {
+     /* reserve asc for all  */
+     for (size_t n = 0; n < ARRAY_SIZE(dcpext_aliases); n++) {
+@@ -1995,6 +2002,14 @@ static int dt_reserve_dcpext_firmware(void)
+ 
+         // refresh dcpext_node
+         dcpext_node = fdt_path_offset(dt, dcpext_alias);
++        if (!enable) {
++            if ((dcpext_node < 0) ||
++                (fdt_setprop_u32(dt, dcpext_node, "apple,t8122-dcpext-firmware-ready", 1) < 0))
++                printf("FDT: failed to mark '%s' firmware ready\n", dcpext_alias);
++            else
++                printf("FDT: '%s' firmware reserved, left to the kernel\n", dcpext_alias);
++            continue;
++        }
+         if ((dcpext_node < 0) || (fdt_setprop_string(dt, dcpext_node, "status", "okay") < 0))
+             printf("FDT: failed to enable '%s'\n", dcpext_alias);
+     }
+@@ -2153,7 +2168,15 @@ static int dt_set_display(void)
           * helpers above (they bail out of kboot or enable nodes) and never enables a node.
           * On T8122 it does nothing unless chosen.asahi,t8122-dcp=1.
           */
@@ -10,18 +41,28 @@ index 70f1d99b..92d3fcac 100644
 +        ret = dt_set_display_handoff(dt);
 +        /*
 +         * dcpext is not part of the iBoot handoff: reserve its ASC firmware and
-+         * enable it as on t8112. The node stays disabled if anything is missing.
++         * mark it ready. The node stays disabled; the kernel's display gate
++         * enables it (see dt_reserve_dcpext_firmware()).
 +         */
 +        if (!fdt_node_check_compatible(dt, 0, "apple,t8122"))
-+            dt_reserve_dcpext_firmware();
++            dt_reserve_dcpext_firmware(false);
 +        return ret;
      } else {
          printf("FDT: unknown compatible, skip display reserved-memory setup\n");
          return 0;
-diff --git i/src/utils.c w/src/utils.c
+@@ -2169,7 +2192,7 @@ static int dt_set_display(void)
+         !fdt_node_check_compatible(dt, 0, "apple,t6020") ||
+         !fdt_node_check_compatible(dt, 0, "apple,t6021") ||
+         !fdt_node_check_compatible(dt, 0, "apple,t6022"))
+-        dt_reserve_dcpext_firmware();
++        dt_reserve_dcpext_firmware(true);
+ 
+     const display_config_t *disp_cfg = display_get_config();
+ 
+diff --git a/src/utils.c b/src/utils.c
 index fd8b2cde..c6526b36 100644
---- i/src/utils.c
-+++ w/src/utils.c
+--- a/src/utils.c
++++ b/src/utils.c
 @@ -283,3 +283,12 @@ void cpu_sleep(bool deep)
          sysop("wfi");
      }

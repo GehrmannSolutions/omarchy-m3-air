@@ -1,7 +1,8 @@
 # Status and test criteria (2026-10-14)
 
-Kernel `7.1.12-fay-v2` ([../kernel/](../kernel/)): since 2026-10-14 the 12-patch series, the lid-closed set
-(`patches-clamshell/`) and the local GPU patch, with our boot.bin device tree ([../boot/](../boot/)).
+Kernel `7.1.12-fay-v2` ([../kernel/](../kernel/)): since 2026-10-14 omacom/linux-aurora#114 (the maintainer's
+version of our 12-patch series) plus the lid-closed set (`patches-clamshell/`), with our boot.bin
+device tree ([../boot/](../boot/)).
 Test displays: a 3440x1440 ultrawide with a USB hub (60 Hz over two DP lanes) and a portable 1080p
 display. "Rear" = rear-left USB-C port, "front" = left-front USB-C port.
 

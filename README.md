@@ -19,7 +19,7 @@ machine: what works, how we got there, and the state we run every day.
 | Area | Status |
 |---|---|
 | Internal panel | works (Aurora DCP, firmware 14.7 interface) |
-| GPU (M3 G15G) | works on Aurora with the DPE block (`asahi.t8122_dpe_leak=1`) and mesa-m3 |
+| GPU (M3 G15G) | works on Aurora and mesa-m3 (the #114 base writes the power block itself; older bases need our DPE patch, `asahi.t8122_dpe_leak=1`) |
 | External display over USB-C, either port | works with our series ([kernel/](kernel/)) and our boot.bin DT ([boot/](boot/)) |
 | Switching the display between the two ports | works both ways without replugging |
 | Second external display at the same time | not possible with the lid open (one external pipeline); the second display waits and the desktop says so |

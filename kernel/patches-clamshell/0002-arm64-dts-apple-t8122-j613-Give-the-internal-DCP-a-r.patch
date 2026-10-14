@@ -1,7 +1,7 @@
-From 8bead0e80f9b0350754377aba16923932123f9aa Mon Sep 17 00:00:00 2001
+From f342069d68c74985e1e5b54b8f19fb5987cc185c Mon Sep 17 00:00:00 2001
 From: Marius Gehrmann <marius@gehrmann.solutions>
 Date: Tue, 13 Oct 2026 17:04:57 +0200
-Subject: [PATCH 14/22] arm64: dts: apple: t8122-j613: Give the internal DCP a
+Subject: [PATCH 2/6] arm64: dts: apple: t8122-j613: Give the internal DCP a
  route to the front port
 
 With the lid closed and two external displays, macOS drives one of them
@@ -16,26 +16,31 @@ Give the internal DCP that Type-C display route to the left-front port
 DPTX target 1, and a second endpoint on the front connector's port@3,
 one per pipeline as on the M1 Pro/Max laptops.
 
-The route stays disabled, like dcpext's; the display gate enables it
-together with dcpext. The display driver offers it only while the lid
-is closed and the panel is off, and only to a display that dcpext
-cannot take.
+The route stays disabled, like dcpext and its routes; the display gate
+enables it in the same changeset, behind the boot loader's marker. The
+display driver uses it only while the lid is closed and the panel and
+its CRTC are off.
 
 Assisted-by: Claude:claude-opus-5-5
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_017YMqWu7A3VwEYtHaA1TusK
+Signed-off-by: Marius Gehrmann <marius@gehrmann.solutions>
 ---
- arch/arm64/boot/dts/apple/t8122-j613.dts | 49 +++++++++++++++++++++++-
- 1 file changed, 48 insertions(+), 1 deletion(-)
+ arch/arm64/boot/dts/apple/t8122-j613.dts | 57 +++++++++++++++++++++---
+ 1 file changed, 52 insertions(+), 5 deletions(-)
 
 diff --git a/arch/arm64/boot/dts/apple/t8122-j613.dts b/arch/arm64/boot/dts/apple/t8122-j613.dts
-index 4dda28adc..07e66fd78 100644
+index 330a02fe9..4128a2abe 100644
 --- a/arch/arm64/boot/dts/apple/t8122-j613.dts
 +++ b/arch/arm64/boot/dts/apple/t8122-j613.dts
-@@ -353,14 +353,61 @@ typec0_dcpext: endpoint {
+@@ -335,13 +335,60 @@ typec0_dcpext: endpoint {
  	};
  };
  
+-&typec1 {
+-	ports {
+-		port@3 {
+-			reg = <3>;
 +/*
 + * With the lid closed the internal DCP's pipe can drive a second external
 + * display on the left-front port, as macOS does: in the J613 ADT the
@@ -56,7 +61,8 @@ index 4dda28adc..07e66fd78 100644
 +	mux-control-names = "typec0";
 +	apple,typec-mux-indices = <0>;
 +	apple,typec-dptx-phys = <1>;
-+
+ 
+-			typec1_dcpext: endpoint {
 +	typec-routes {
 +		#address-cells = <1>;
 +		#size-cells = <0>;
@@ -75,26 +81,24 @@ index 4dda28adc..07e66fd78 100644
 +	};
 +};
 +
- &typec1 {
- 	ports {
- 		port@3 {
- 			reg = <3>;
++&typec1 {
++	ports {
++		port@3 {
++			reg = <3>;
 +			#address-cells = <1>;
 +			#size-cells = <0>;
- 
--			typec1_dcpext: endpoint {
++
 +			typec1_dcpext: endpoint@0 {
 +				reg = <0>;
  				remote-endpoint = <&dcpext_typec1>;
- 			};
++			};
 +
 +			typec1_dcp: endpoint@1 {
 +				reg = <1>;
 +				remote-endpoint = <&dcp_typec1>;
-+			};
+ 			};
  		};
  	};
- };
 -- 
 2.56.0
 

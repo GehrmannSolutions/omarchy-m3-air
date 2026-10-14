@@ -1,0 +1,309 @@
+From a8de138e4b22fbc9eb8e1d564053d5e596dd7547 Mon Sep 17 00:00:00 2001
+From: Marius Gehrmann <marius@gehrmann.solutions>
+Date: Wed, 14 Oct 2026 11:40:53 +0200
+Subject: [PATCH 6/6] drm: apple: Move the J613 left-front display to the
+ internal pipe when needed
+
+On J613 with the lid closed, dcpext can drive either USB-C port and the
+internal pipe only the left-front one. A display on the left-front port
+can hold dcpext while a display on the left-back port, which only dcpext
+can drive, waits, although the internal pipe is free.
+
+macOS drives the second external display with the internal pipe. Move
+the left-front display there when that is needed, and only then: as any
+move, an unplug and replug (its link goes down first, which also tells
+the old CRTC's late power-off to leave the next display alone), then the
+other display gets the dcpext it let go of. If the internal pipe cannot
+take the moved display after all, that display waits and the other one
+is driven. Three cases need it:
+
+- A display arrives on the left-back port with the lid closed while
+  dcpext drives the left-front one (dcp_typec_clamshell_make_room()).
+- The lid closes while a left-back display waits for dcpext, which
+  drives the left-front one (dcp_typec_clamshell_serve_waiting()).
+- Boot with the lid closed, before a compositor has paired the
+  connectors: a left-front display that took dcpext first moves to the
+  internal pipe, where aquamarine will pair it, and a waiting display
+  then takes dcpext (dcp_typec_clamshell_settle()). Whether a
+  compositor runs is looked up from any pipeline's CRTC: the dual-stream
+  helper finds no DRM device on J613.
+
+Otherwise a lid close moves nothing, so the left-front display stays
+lit. (Moving it at every lid close frees dcpext early too, but blanks it
+for about four seconds each time, for nothing when no second display
+comes.)
+
+The wait message now says what happens, and a display that takes a
+pipeline it waited for says so:
+
+  display on USB-C Left-front waits for an external display pipeline:
+  it drives another display; unplug that one and this one takes over
+
+Tested on J613 (MacBook Air 13" M3, display firmware 14.7) with a
+1080p display on the left-front port and a 3440x1440 one on the
+left-back port, Hyprland, and a user service that suspends a closed
+laptop only after ten seconds without an external display: lid closed
+and opened five times with both displays, both lit each time with the
+lid closed and the panel back 33-173 ms after opening; a left-back
+display waiting with the lid open gets dcpext on lid close; a display
+arriving with the lid closed; boot with the lid closed (panel never
+powered); suspend with the lid closed and wake by opening it.
+
+Assisted-by: Claude:claude-opus-5-5
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_017YMqWu7A3VwEYtHaA1TusK
+Signed-off-by: Marius Gehrmann <marius@gehrmann.solutions>
+---
+ drivers/gpu/drm/apple/dcp-fabric.c | 192 ++++++++++++++++++++++++++++-
+ 1 file changed, 187 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/gpu/drm/apple/dcp-fabric.c b/drivers/gpu/drm/apple/dcp-fabric.c
+index e08f27d4b..a6d6e85b7 100644
+--- a/drivers/gpu/drm/apple/dcp-fabric.c
++++ b/drivers/gpu/drm/apple/dcp-fabric.c
+@@ -518,6 +518,19 @@ static struct drm_device *dcp_typec_drm(void)
+ 	return drm;
+ }
+ 
++/* The DRM device the Type-C pipelines belong to, on any machine. */
++static struct drm_device *dcp_typec_any_drm(void)
++{
++	struct apple_dcp_typec_port *port;
++	struct apple_dcp_typec_route *route;
++
++	list_for_each_entry(port, &dcp_typec_ports, link)
++		list_for_each_entry(route, &port->routes, port_link)
++			if (route->dcp->crtc)
++				return route->dcp->crtc->base.dev;
++	return NULL;
++}
++
+ /*
+  * Has a compositor (or boot splash) taken the display?  It paired its
+  * connectors with CRTCs when it started and keeps that pairing, also
+@@ -985,6 +998,10 @@ static void dcp_typec_route_waiting(void)
+ 		if (!route || dcp_typec_route_activate(route, route->xbar))
+ 			continue;
+ 		port->owner = route;
++		if (port->busy_noted)
++			dev_info(route->dcp->dev, "the display on %pOF takes over this pipeline\n",
++				 port->connector_np);
++		port->busy_noted = false;
+ 		dcp_typec_port_attach(port);
+ 	}
+ }
+@@ -1238,15 +1255,22 @@ void dcp_typec_reorder(void)
+ 
+ static int dcp_typec_port_busy(struct apple_dcp_typec_port *port,
+ 			       struct apple_dcp *dcp);
++static void dcp_typec_clamshell_settle(void);
++static void dcp_typec_clamshell_serve_waiting(void);
+ 
+ /*
+  * The J613 internal pipe became free for a Type-C display (lid closed, panel
+  * off) or is its panel's again (the lid opens). Free: it takes a port left
+  * waiting for a pipeline, as any pipeline that is let go of, ranked before
+- * dcpext while it is free (see dcp_fabric_snapshot_port()). Its panel's
+- * again: the display it drives lets go of it (powered off first, as macOS
+- * does), and goes to another free pipeline or waits again. Returns whether
+- * a display let go.
++ * dcpext while it is free (see dcp_fabric_snapshot_port()); and before a
++ * compositor owns the displays (boot with the lid closed), a display that
++ * took dcpext on the left-front port moves to it, where the compositor will
++ * pair that display (dcp_typec_clamshell_settle()); once a compositor runs,
++ * that display moves only if another one waits for dcpext
++ * (dcp_typec_clamshell_serve_waiting()). Its panel's again: the
++ * display it drives lets go of it (powered off first, as macOS does), and
++ * goes to another free pipeline or waits again. Returns whether a display
++ * let go.
+  */
+ bool dcp_typec_pipeline_changed(struct apple_dcp *dcp)
+ {
+@@ -1257,6 +1281,8 @@ bool dcp_typec_pipeline_changed(struct apple_dcp *dcp)
+ 
+ 	if (!dcp_typec_route_fixed_output_busy(&dcp->typec_routes[0])) {
+ 		dcp_typec_pipeline_freed();
++		dcp_typec_clamshell_settle();
++		dcp_typec_clamshell_serve_waiting();
+ 		return false;
+ 	}
+ 	for (i = 0; i < dcp->nr_typec_routes; i++) {
+@@ -1299,11 +1325,165 @@ static int dcp_typec_port_busy(struct apple_dcp_typec_port *port,
+ 	port->busy_noted = true;
+ 	of_property_read_string(port->connector_np, "label", &label);
+ 	dev_info(dcp->dev,
+-		 "display on %s waits for an external display pipeline: it drives another display; to switch, unplug that one, then plug this one in again\n",
++		 "display on %s waits for an external display pipeline: it drives another display; unplug that one and this one takes over\n",
+ 		 label ?: "a USB-C port");
+ 	return -EBUSY;
+ }
+ 
++/*
++ * Move the display on @port from @from (dcpext) to @to, the free J613
++ * internal pipe: an unplug and replug, as any move. Returns whether @from
++ * was let go of.
++ */
++static bool dcp_typec_clamshell_move(struct apple_dcp_typec_port *port,
++				     struct apple_dcp_typec_route *from,
++				     struct apple_dcp_typec_route *to)
++{
++	struct apple_dcp *dcp = from->dcp;
++	int ret;
++
++	lockdep_assert_held(&dcp_typec_fabric_lock);
++	if (port->hpd || dcp->typec_cable_connected ||
++	    (dcp->typec_connector && dcp->typec_connector->connected)) {
++		ret = dcp_dptx_disconnect_oob(to_platform_device(dcp->dev), 0);
++		if (ret)
++			return false;
++	}
++	port->hpd = false;
++	ret = dcp_typec_route_deactivate(from);
++	if (ret)
++		return false;
++	port->owner = NULL;
++	port->applied_valid = false;
++	port->preferred_route = to;
++	/* @from is free now, whether the internal pipe takes over or not */
++	if (dcp_typec_route_activate(to, to->xbar)) {
++		port->busy_noted = false;
++		dcp_typec_port_busy(port, to->dcp);
++		return true;
++	}
++	port->owner = to;
++	dcp_typec_port_attach(port);
++	return true;
++}
++
++/*
++ * J613 with the lid closed: a display arriving on @port can only have
++ * dcpext, which drives the display on the left-front port, and the internal
++ * pipe, which only reaches that port, is free. As macOS, which drives the
++ * second external display with the internal pipe, move the left-front
++ * display to the internal pipe (an unplug and replug, as any move), so that
++ * dcpext is free for @port. Only then: nothing moves otherwise. Returns
++ * whether a pipeline @port can have was let go of.
++ */
++static bool dcp_typec_clamshell_make_room(struct apple_dcp_typec_port *port)
++{
++	struct apple_dcp_typec_port *other;
++	struct apple_dcp_typec_route *route, *from, *to;
++	struct apple_dcp *dcp;
++	bool reachable;
++
++	lockdep_assert_held(&dcp_typec_fabric_lock);
++	if (!port->dp_hpd)
++		return false;
++	list_for_each_entry(other, &dcp_typec_ports, link) {
++		from = other->owner;
++		if (other == port || !from || from->tunnel || other->secondary_owner ||
++		    from->dcp->clamshell)
++			continue;
++		/* @port could have the pipeline @other has... */
++		reachable = false;
++		list_for_each_entry(route, &port->routes, port_link)
++			reachable |= route->dcp == from->dcp && !route->tunnel;
++		if (!reachable)
++			continue;
++		/* ...and @other could have the free internal pipe instead. */
++		to = NULL;
++		list_for_each_entry(route, &other->routes, port_link)
++			if (route->dcp->clamshell && !route->tunnel &&
++			    dcp_typec_route_available(route))
++				to = route;
++		if (!to)
++			continue;
++
++		dcp = from->dcp;
++		dev_info(dcp->dev, "lid closed: the display on %pOF moves to the internal pipe, so that this pipeline can drive the one on %pOF\n",
++			 other->connector_np, port->connector_np);
++		return dcp_typec_clamshell_move(other, from, to);
++	}
++	return false;
++}
++
++/*
++ * Before a compositor owns the displays (boot with the lid closed): a
++ * display on the left-front port that took dcpext before the internal pipe
++ * was free moves to the internal pipe, the CRTC aquamarine will pair it
++ * with (the lowest free one it can use while the panel's connector reads
++ * disconnected). Once a compositor runs it keeps the CRTC it gave the
++ * display, so nothing moves then.
++ */
++static void dcp_typec_clamshell_settle(void)
++{
++	struct apple_dcp_typec_port *port;
++	struct apple_dcp_typec_route *route, *from, *to;
++	struct drm_device *drm;
++	bool moved = false;
++
++	lockdep_assert_held(&dcp_typec_fabric_lock);
++	/*
++	 * Not dcp_typec_drm(): that one only answers on dual-stream machines
++	 * (every port with a second connector), so on J613 it never found the
++	 * device and this moved displays under a running compositor.
++	 */
++	drm = dcp_typec_any_drm();
++	if (drm && dcp_typec_frozen(drm))
++		return;
++	list_for_each_entry(port, &dcp_typec_ports, link) {
++		from = port->owner;
++		if (!from || from->tunnel || port->secondary_owner ||
++		    from->dcp->clamshell)
++			continue;
++		to = NULL;
++		list_for_each_entry(route, &port->routes, port_link)
++			if (route->dcp->clamshell && !route->tunnel &&
++			    dcp_typec_route_available(route))
++				to = route;
++		if (!to)
++			continue;
++		dev_info(from->dcp->dev, "lid closed, before a compositor started: the display on %pOF moves to the internal pipe, where the compositor will pair it\n",
++			 port->connector_np);
++		moved |= dcp_typec_clamshell_move(port, from, to);
++	}
++	/* dcpext is free now: a display waiting for it takes it */
++	if (moved)
++		dcp_typec_route_waiting();
++}
++
++/*
++ * The internal pipe became free with the lid closed while a display waits
++ * for dcpext, which drives the display on the left-front port (the lid was
++ * opened, both were plugged in, the second one waited): move the left-front
++ * display to the internal pipe and give dcpext to the one waiting, as when
++ * that display arrives with the lid already closed
++ * (dcp_typec_clamshell_make_room()). Nothing moves when nothing waits: the
++ * compositor keeps the display where it is.
++ */
++static void dcp_typec_clamshell_serve_waiting(void)
++{
++	struct apple_dcp_typec_port *port;
++	bool moved = false;
++
++	lockdep_assert_held(&dcp_typec_fabric_lock);
++	list_for_each_entry(port, &dcp_typec_ports, link) {
++		if (port->owner || port->secondary_owner || !port->dp_wanted ||
++		    !port->dp_hpd || dcp_typec_free_route(port))
++			continue;
++		moved |= dcp_typec_clamshell_make_room(port);
++	}
++	if (moved)
++		dcp_typec_route_waiting();
++}
++
+ static int dcp_typec_route_set(struct typec_mux_dev *mux,
+ 			       struct typec_mux_state *state)
+ {
+@@ -1433,6 +1613,8 @@ static int dcp_typec_route_set(struct typec_mux_dev *mux,
+ 
+ 	if (!port->owner) {
+ 		best = dcp_typec_free_route(port);
++		if (!best && dcp_typec_clamshell_make_room(port))
++			best = dcp_typec_free_route(port);
+ 		if (!best)
+ 			return dcp_typec_port_busy(port, route->dcp);
+ 
+-- 
+2.56.0
+

@@ -1,69 +1,50 @@
-From 6b4338416a56f510dc9fe9382b23901923ffbb29 Mon Sep 17 00:00:00 2001
+From 4325b49035b613d5564f858f2a15217bd0b52fdb Mon Sep 17 00:00:00 2001
 From: Marius Gehrmann <marius@gehrmann.solutions>
-Date: Tue, 13 Oct 2026 17:15:59 +0200
-Subject: [PATCH 16/22] drm: apple: Let the T8122 internal pipe drive a Type-C
+Date: Wed, 14 Oct 2026 11:40:27 +0200
+Subject: [PATCH 5/6] drm: apple: Let the J613 internal pipe drive a Type-C
  display, lid closed
 
 With the lid closed and two external displays, macOS drives the second
 one with the internal DCP's pipe (IOMFBIntDcpUsedForExtWhenLidClose):
 the panel is off, and the pipe's first DPTX core is free for the
-left-front USB-C port. dcpext keeps the display it drives. When the lid
-opens, the pipe goes back to the panel and that display waits again.
+left-front USB-C port. When the lid opens, the pipe goes back to the
+panel. Do the same on J613, where the internal pipe has a Type-C route
+to that port (dcp->clamshell).
 
-Do the same on J613, where the internal pipe has a Type-C route to that
-port (dcp->clamshell):
+Fabric. The internal pipe counts as busy unless the lid is closed and
+the panel and its CRTC are off (dcp->clamshell_free). While it is free
+it ranks as a plain pipeline, before dcpext: with the panel's connector
+disconnected, aquamarine (Hyprland) gives a display coming up on the
+left-front port the lowest free CRTC it can use, the internal pipe's,
+and the route follows that pairing (routed to dcpext instead, every mode
+failed the atomic check, and the panel found its only CRTC taken on lid
+open). When the pipe becomes free it takes a display left waiting, as
+any pipeline that is let go of (dcp_typec_pipeline_changed()). When the
+lid opens, that display lets go of the pipe first (powered off, HPD
+dropped, route taken down), then IOMFB is told; the display goes to
+dcpext if dcpext is free, or waits again with the usual log line.
 
-Fabric. The port has two pipelines. The internal one counts as busy
-unless the lid is closed and the panel off (dcp->clamshell_free), and it
-ranks after dcpext, as a hybrid whose fixed output is the panel. So a
-free dcpext always takes the display, lid open or closed, and the
-internal pipe only takes one that would otherwise wait. When it becomes
-free it takes such a waiting display, as any pipeline that is let go of
-(dcp_typec_pipeline_changed()). When the lid opens, that display lets
-go of it (powered off, HPD dropped, display released, route taken down)
-and goes to dcpext if dcpext is free by then, or waits again with the
-usual log line. If dcpext becomes free while the internal pipe drives
-the display, nothing moves until the lid opens.
-
-Lid. The lid work (previous patch) also decides whether the pipe is
-free: after A475(2), and once the panel is off. As macOS opens the lid,
-the display lets go of the pipe first, then IOMFB is told. Powering the
-panel off or on with its CRTC re-runs it.
+Lid open, order. The panel's connector comes back once the compositor
+switched the pipe's CRTC off, or two seconds later, and at once if the
+CRTC was off already. A left-front display that leaves the pipe for a
+free dcpext reads disconnected until then (at most 3 s) and is reported
+200 ms after the panel, so that the compositor gives the panel its CRTC
+back and the display dcpext's.
 
 Session. Once the panel has started, the DPTX endpoint is started for
 the route, and the DPAV controller endpoint with it, as for the T6030
-external processors: the dev series had it started in every test, and
-the firmware only sent reports there (type 0xc0), never a call that
-would need an answer; leaving it stopped was never tested. The DPTX
-RemotePort unit 0 (core 0, crossbar dispext0,0) is DPTX port 0 as
-usual; the panel's own DPTX port, if announced, is never bound. The
-link is connected as on the T8122 dcpext (AsahiLinux/linux#607 model,
-dcp_ext_dptx_607()), the same firmware image. Call 25, which the
-firmware sends to each RemotePort when the lid state changes (its DPTX
-controllers' setActive()), is acknowledged quietly. While the route is
-active (v14->typec), the session handles the display description as
-on an external processor: the published timings become the pipe's
-modes, and the display is reported connected once described. Its mode
-is set on the 14.7 session with A472(1) before A411 (A411 first leaves
-the firmware with "Modeset done, but pipe not enabled"); its CRTC off
-powers it off (A472(0)), as on an external processor, and the usual
-Type-C DPMS path releases and restores the link. Swaps are sized to its
-mode, without notch rows or the panel's colour matrix, and a refused
-swap does not end the session. When the route is taken down, the
-panel's one mode is the pipe's catalog again.
-
-Connectors. While the display has the pipe, and until the lid opens,
-the panel's connector is reported disconnected: compositors such as
-aquamarine keep a CRTC for every connected connector, and the pipe has
-one. It comes back once the compositor switched the CRTC off after the
-lid opened, or two seconds later.
-
-Tested on J613 in the dev series with the same firmware calls, with a
-display on each port and the lid closed and opened six times: the
-second display came up on the internal pipe each time (first frame
-about 28 ms after the mode set), the panel came back each time, no
-kernel errors. The dcpext-first rule, the order A472(1) before A411,
-the give-back through the fabric and the connector handling are new.
+external processors. The DPTX RemotePort unit 0 (core 0, crossbar
+dispext0,0) is DPTX port 0; the panel's own DPTX port is never bound.
+The link is connected as on the T8122 dcpext (dcp_ext_dptx_607()), the
+same firmware image. Call 25, which the firmware sends to each
+RemotePort when the lid state changes, is acknowledged quietly. While
+the route is active (v14->typec) the session handles the display
+description as on an external processor; the mode is set with A472(1)
+before A411 (A411 first leaves "Modeset done, but pipe not enabled"),
+its CRTC off powers it off (A472(0)), swaps are sized to its mode
+without notch rows or the panel's colour matrix, and a refused swap does
+not end the session. When the route is taken down, the panel's one mode
+is the pipe's catalog again.
 
 Other machines are unchanged, and so is J613 without the route.
 
@@ -71,20 +52,40 @@ Link: https://github.com/AsahiLinux/linux/pull/607
 Assisted-by: Claude:claude-opus-5-5
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_017YMqWu7A3VwEYtHaA1TusK
+Signed-off-by: Marius Gehrmann <marius@gehrmann.solutions>
 ---
- drivers/gpu/drm/apple/dcp-fabric.c   |  60 +++++++-
+ drivers/gpu/drm/apple/apple_drv.c    |   6 +-
+ drivers/gpu/drm/apple/dcp-fabric.c   |  69 +++++++-
  drivers/gpu/drm/apple/dcp-fabric.h   |   1 +
- drivers/gpu/drm/apple/dcp-internal.h |  20 ++-
- drivers/gpu/drm/apple/dcp.c          |  91 ++++++++++-
+ drivers/gpu/drm/apple/dcp-internal.h |  25 ++-
+ drivers/gpu/drm/apple/dcp.c          | 142 ++++++++++++++-
+ drivers/gpu/drm/apple/dcp.h          |   1 +
  drivers/gpu/drm/apple/dptxep.c       |   4 +
  drivers/gpu/drm/apple/dptxep.h       |   2 +
  drivers/gpu/drm/apple/iomfb.c        |   7 +-
- drivers/gpu/drm/apple/iomfb_v14_7.c  | 221 ++++++++++++++++++++++++---
- drivers/gpu/drm/apple/iomfb_v14_7.h  |  12 ++
- 9 files changed, 392 insertions(+), 26 deletions(-)
+ drivers/gpu/drm/apple/iomfb_v14_7.c  | 247 ++++++++++++++++++++++++---
+ drivers/gpu/drm/apple/iomfb_v14_7.h  |  13 ++
+ 11 files changed, 476 insertions(+), 41 deletions(-)
 
+diff --git a/drivers/gpu/drm/apple/apple_drv.c b/drivers/gpu/drm/apple/apple_drv.c
+index 7cd11771f..1cce8b59a 100644
+--- a/drivers/gpu/drm/apple/apple_drv.c
++++ b/drivers/gpu/drm/apple/apple_drv.c
+@@ -98,8 +98,10 @@ apple_connector_detect(struct drm_connector *connector, bool force)
+ 		return connector_status_connected;
+ 	if (connector->force == DRM_FORCE_OFF)
+ 		return connector_status_disconnected;
+-	return READ_ONCE(apple_connector->connected) ? connector_status_connected :
+-						    connector_status_disconnected;
++	if (!READ_ONCE(apple_connector->connected) ||
++	    dcp_clamshell_hold_connector(apple_connector))
++		return connector_status_disconnected;
++	return connector_status_connected;
+ }
+ 
+ static void apple_connector_oob_hotplug(struct drm_connector *connector,
 diff --git a/drivers/gpu/drm/apple/dcp-fabric.c b/drivers/gpu/drm/apple/dcp-fabric.c
-index 883429eff..5b6960153 100644
+index 37b2f307f..e08f27d4b 100644
 --- a/drivers/gpu/drm/apple/dcp-fabric.c
 +++ b/drivers/gpu/drm/apple/dcp-fabric.c
 @@ -120,6 +120,12 @@ static bool dcp_typec_route_fixed_output_busy(struct apple_dcp_typec_route *rout
@@ -100,7 +101,7 @@ index 883429eff..5b6960153 100644
  	/*
  	 * The 14.7 firmware drives the internal panel on the IOMFB path.
  	 * The DPTX service is a separate output, so the live panel does not
-@@ -335,6 +341,8 @@ static int dcp_typec_route_activate(struct apple_dcp_typec_route *route,
+@@ -362,6 +368,8 @@ static int dcp_typec_route_activate(struct apple_dcp_typec_route *route,
  	route->selected = true;
  
  	dev_info(dcp->dev, "allocated Type-C DPTX PHY %u\n", route->dptx_phy);
@@ -109,7 +110,7 @@ index 883429eff..5b6960153 100644
  	return 0;
  }
  
-@@ -424,6 +432,8 @@ static int dcp_typec_route_deactivate(struct apple_dcp_typec_route *route)
+@@ -448,6 +456,8 @@ static int dcp_typec_route_deactivate(struct apple_dcp_typec_route *route)
  	dcp->typec_connector = NULL;
  	dcp->connector = dcp->fixed_connector;
  	WRITE_ONCE(dcp->ext_backlight, false);
@@ -118,17 +119,25 @@ index 883429eff..5b6960153 100644
  
  	if (dcp->fixed_connector_type != DRM_MODE_CONNECTOR_USB) {
  		dcp->connector_type = dcp->fixed_connector_type;
-@@ -807,7 +817,8 @@ static void dcp_fabric_snapshot_port(struct apple_dcp_typec_port *port,
+@@ -831,7 +841,16 @@ static void dcp_fabric_snapshot_port(struct apple_dcp_typec_port *port,
  		pipeline->bound = !!dcp->crtc && !dcp->tb_retiring;
  		pipeline->crtc_index =
  			dcp->crtc ? drm_crtc_index(&dcp->crtc->base) : 0;
 -		pipeline->has_fixed = !!dcp->fixed_phy;
-+		/* The J613 internal pipe is a hybrid too: its panel is its fixed output. */
-+		pipeline->has_fixed = !!dcp->fixed_phy || dcp->clamshell;
++		/*
++		 * The J613 internal pipe is a hybrid too, its panel being its
++		 * fixed output, but not while the lid is closed and the panel
++		 * off: the panel's connector reads disconnected then, and
++		 * aquamarine gives a display on the left-front port the lowest
++		 * free CRTC it can use, the internal pipe's (index 0, below
++		 * dcpext's). Ranked as a plain pipeline, the route follows.
++		 */
++		pipeline->has_fixed = !!dcp->fixed_phy ||
++			(dcp->clamshell && !READ_ONCE(dcp->clamshell_free));
  		pipeline->fixed_busy = dcp_typec_route_busy(route);
  		pipeline->owned = !!dcp->active_typec_route || dcp->tb_retiring;
  		pipeline->tunnel_held = dcp_typec_tunnel_held(dcp);
-@@ -1193,6 +1204,53 @@ void dcp_typec_reorder(void)
+@@ -1217,6 +1236,54 @@ void dcp_typec_reorder(void)
  		dcp_typec_rebalance_locked(NULL, 0);
  }
  
@@ -138,10 +147,11 @@ index 883429eff..5b6960153 100644
 +/*
 + * The J613 internal pipe became free for a Type-C display (lid closed, panel
 + * off) or is its panel's again (the lid opens). Free: it takes a port left
-+ * waiting for a pipeline, as any pipeline that is let go of; the ranking puts
-+ * it after dcpext, as a hybrid. Its panel's again: the display it drives lets
-+ * go of it (powered off first, as macOS does), and goes to another free
-+ * pipeline or waits again. Returns whether a display let go.
++ * waiting for a pipeline, as any pipeline that is let go of, ranked before
++ * dcpext while it is free (see dcp_fabric_snapshot_port()). Its panel's
++ * again: the display it drives lets go of it (powered off first, as macOS
++ * does), and goes to another free pipeline or waits again. Returns whether
++ * a display let go.
 + */
 +bool dcp_typec_pipeline_changed(struct apple_dcp *dcp)
 +{
@@ -195,26 +205,34 @@ index 26cfdf99e..3ee8a0557 100644
  bool dcp_typec_follow_holder_off(struct drm_atomic_state *state, struct drm_crtc *crtc,
  				 struct apple_connector *connector, struct apple_dcp *back);
 diff --git a/drivers/gpu/drm/apple/dcp-internal.h b/drivers/gpu/drm/apple/dcp-internal.h
-index 536ae254c..9fec1224f 100644
+index a30799468..a218733c6 100644
 --- a/drivers/gpu/drm/apple/dcp-internal.h
 +++ b/drivers/gpu/drm/apple/dcp-internal.h
-@@ -205,6 +205,15 @@ struct apple_dcp {
+@@ -200,13 +200,19 @@ struct apple_dcp {
+ 	struct apple_dcp_v14 *v14;
+ 	/*
+ 	 * J613: the internal panel's pipe also has a Type-C route. The driver
+-	 * tells its firmware the lid state, and powers the panel off while the
+-	 * lid is closed, as macOS does (see dcp_lid_*()). While the lid is
+-	 * closed the panel's connector is reported disconnected
+-	 * (clamshell_panel_away; clamshell_panel_work).
++	 * tells its firmware the lid state, and powers the panel off with its
++	 * CRTC while the lid is closed, as macOS does (see dcp_lid_*()).
  	 */
  	bool clamshell;
  	struct work_struct clamshell_start_work;
 +	/*
-+	 * The lid is closed and the panel off: the route may drive a Type-C
-+	 * display (see dcp_typec_pipeline_changed()). While one has the pipe,
-+	 * and until the lid opens again, the panel's connector is reported
-+	 * disconnected (clamshell_panel_away; clamshell_panel_work).
++	 * The lid is closed and the panel and its CRTC off: the route may
++	 * drive a Type-C display (see dcp_typec_pipeline_changed()). While the
++	 * lid is closed, and until a display that had the pipe let go of it,
++	 * the panel's connector is reported disconnected (clamshell_panel_away;
++	 * clamshell_panel_work).
 +	 */
 +	bool clamshell_free;
-+	bool clamshell_panel_away;
-+	struct delayed_work clamshell_panel_work;
- 	struct apple_dcp_v26 *v26;
- 
- 	/* Coprocessor control register */
-@@ -473,17 +482,22 @@ static inline bool dcp_is_v14_panel(const struct apple_dcp *dcp)
+ 	bool clamshell_panel_away;
+ 	/* The pipe's one CRTC is on (dcp_poweron() to dcp_poweroff()). */
+ 	bool clamshell_crtc_on;
+@@ -479,17 +485,22 @@ static inline bool dcp_is_v14_panel(const struct apple_dcp *dcp)
  	return dcp->fw_compat == DCP_FIRMWARE_V_14_7 && !dcp->external;
  }
  
@@ -241,21 +259,26 @@ index 536ae254c..9fec1224f 100644
  
  #define DCP_AUDIO_MAX_CHANS 15
 diff --git a/drivers/gpu/drm/apple/dcp.c b/drivers/gpu/drm/apple/dcp.c
-index cbf563501..7ca2181cc 100644
+index 48cf4b711..78f4efbb6 100644
 --- a/drivers/gpu/drm/apple/dcp.c
 +++ b/drivers/gpu/drm/apple/dcp.c
-@@ -1318,21 +1318,90 @@ unsigned long* dcp_get_iomfb_surfaces(struct platform_device *pdev)
-  * panel's firmware the lid state, and with the lid closed the panel is
-  * powered off with its CRTC (iomfb_v14_7_set_lid()), so that the desktop's
-  * clamshell handling decides when, as on any laptop.
+@@ -1323,13 +1323,39 @@ unsigned long* dcp_get_iomfb_surfaces(struct platform_device *pdev)
+  * the lid is closed then, so that no compositor lights a panel nobody sees.
+  * That is also what keeps the firmware alive: once told the lid is closed it
+  * takes the pipe for a second external display at power-on and swallows
+- * every panel frame, which then never completes. As the lid opens, IOMFB is
+- * told first, then the panel's connector comes back.
++ * every panel frame, which then never completes.
 + *
-+ * With the lid closed and the panel off the pipe is free for the display on
-+ * its Type-C route (dcp->clamshell_free), one that dcpext cannot take (see
-+ * dcp_typec_pipeline_changed()). Its panel's connector is then reported
-+ * disconnected, so that a compositor gives the pipe's one CRTC to that
-+ * display. As macOS opens the lid, that display lets go of the pipe first,
-+ * then IOMFB is told; the panel's connector comes back once the compositor
-+ * switched the CRTC off, or two seconds later.
++ * With the lid closed and the panel and its CRTC off the pipe is free for
++ * the display on its Type-C route (dcp->clamshell_free), and ranked before
++ * dcpext then: the compositor gives that display the pipe's one CRTC, the
++ * lowest free one (see dcp_typec_pipeline_changed()). As macOS opens the
++ * lid, that display lets go of the pipe first, then IOMFB is told; the
++ * panel's connector comes back once the compositor switched the CRTC off,
++ * or two seconds later, and at once if no display had the pipe. A display
++ * that goes to dcpext meanwhile reads disconnected until then
++ * (DCP_CLAMSHELL_HOLD_MS), so that the panel has its CRTC back first.
   */
  static DEFINE_MUTEX(dcp_lid_lock);
  static struct apple_dcp *dcp_lid_dcp;	/* dcp_lid_lock; the handler is registered */
@@ -263,32 +286,66 @@ index cbf563501..7ca2181cc 100644
  
 +#define DCP_CLAMSHELL_PANEL_MS	2000
 +
++/*
++ * As the lid opens, a display on the left-front port that leaves the
++ * internal pipe for a free dcpext reads disconnected until the panel's
++ * connector is connected again, for at most this long: aquamarine pairs a
++ * connector that comes up with the lowest free CRTC it can use, and until
++ * the panel's connector is back that is the internal pipe's, which the
++ * panel needs (its only one) and the display is not routed to.
++ */
++#define DCP_CLAMSHELL_HOLD_MS	3000
++
++static unsigned long dcp_clamshell_hold_until;	/* jiffies */
++static struct apple_connector *dcp_clamshell_held;
++static void dcp_clamshell_hold_work_fn(struct work_struct *work);
++static DECLARE_DELAYED_WORK(dcp_clamshell_hold_work, dcp_clamshell_hold_work_fn);
++
+ /* The panel's connector reads disconnected until the lid opens. */
+ static void dcp_clamshell_panel_away(struct apple_dcp *dcp)
+ {
+@@ -1348,34 +1374,121 @@ static void dcp_clamshell_panel_away(struct apple_dcp *dcp)
  static void dcp_lid_work_fn(struct work_struct *work)
  {
  	int closed = atomic_read(&dcp_lid_closed);
 +	bool gave_back = false, free;
-+	struct apple_dcp *dcp;
+ 	struct apple_dcp *dcp;
  
  	guard(mutex)(&dcp_lid_lock);
--	if (dcp_lid_dcp && closed >= 0)
--		iomfb_v14_7_set_lid(dcp_lid_dcp, closed);
-+	dcp = dcp_lid_dcp;
-+	if (!dcp || closed < 0)
-+		return;
+ 	dcp = dcp_lid_dcp;
+ 	if (!dcp || closed < 0)
+ 		return;
++	if (!closed && READ_ONCE(dcp->clamshell_panel_away)) {
++		WRITE_ONCE(dcp_clamshell_hold_until,
++			   jiffies + msecs_to_jiffies(DCP_CLAMSHELL_HOLD_MS));
++		mod_delayed_work(system_wq, &dcp_clamshell_hold_work,
++				 msecs_to_jiffies(DCP_CLAMSHELL_HOLD_MS));
++	}
 +	if (!closed && READ_ONCE(dcp->clamshell_free)) {
 +		WRITE_ONCE(dcp->clamshell_free, false);
 +		gave_back = dcp_typec_pipeline_changed(dcp);
 +	}
-+	iomfb_v14_7_set_lid(dcp, closed);
+ 	iomfb_v14_7_set_lid(dcp, closed);
+ 	if (closed)
+ 		dcp_clamshell_panel_away(dcp);
+-	else if (READ_ONCE(dcp->clamshell_panel_away))
+-		mod_delayed_work(system_wq, &dcp->clamshell_panel_work, 0);
 +	free = closed && iomfb_v14_7_clamshell_panel_off(dcp);
 +	if (free != READ_ONCE(dcp->clamshell_free)) {
 +		WRITE_ONCE(dcp->clamshell_free, free);
 +		gave_back |= dcp_typec_pipeline_changed(dcp);
 +	}
++	/*
++	 * A display that let go of the pipe still has the CRTC until the
++	 * compositor switches it off (dcp_poweroff() brings the panel back
++	 * then); if it has done so already, the panel comes back at once.
++	 */
 +	if (!closed && READ_ONCE(dcp->clamshell_panel_away))
 +		mod_delayed_work(system_wq, &dcp->clamshell_panel_work,
-+				 gave_back ? msecs_to_jiffies(DCP_CLAMSHELL_PANEL_MS) : 0);
++				 gave_back && READ_ONCE(dcp->clamshell_crtc_on) ?
++				 msecs_to_jiffies(DCP_CLAMSHELL_PANEL_MS) : 0);
  }
+ 
  static DECLARE_WORK(dcp_lid_work, dcp_lid_work_fn);
  
 +/* The panel was powered off or on: the pipe may be free, or not. */
@@ -303,41 +360,82 @@ index cbf563501..7ca2181cc 100644
 + */
 +void dcp_clamshell_attached(struct apple_dcp *dcp, struct device_node *connector_np)
 +{
-+	struct apple_connector *panel = dcp->fixed_connector;
 +	const char *label = NULL;
 +
 +	iomfb_v14_7_typec_attach(dcp);
-+	cancel_delayed_work(&dcp->clamshell_panel_work);
 +	of_property_read_string(connector_np, "label", &label);
 +	dev_info(dcp->dev, "lid closed, panel off: the internal pipe drives the display on %s\n",
 +		 label ?: "a USB-C port");
-+	if (!panel || !READ_ONCE(panel->connected))
-+		return;
-+	WRITE_ONCE(dcp->clamshell_panel_away, true);
-+	WRITE_ONCE(panel->connected, false);
-+	dcp_queue_hotplug(panel);
++	/* already disconnected with the lid closed; makes sure */
++	dcp_clamshell_panel_away(dcp);
 +}
 +
-+static void dcp_clamshell_panel_work(struct work_struct *work)
-+{
-+	struct apple_dcp *dcp = container_of(to_delayed_work(work), struct apple_dcp,
-+					     clamshell_panel_work);
-+	struct apple_connector *panel = dcp->fixed_connector;
-+
+ static void dcp_clamshell_panel_work(struct work_struct *work)
+ {
+ 	struct apple_dcp *dcp = container_of(to_delayed_work(work), struct apple_dcp,
+ 					     clamshell_panel_work);
+ 	struct apple_connector *panel = dcp->fixed_connector;
+ 
+-	/* Only once IOMFB heard the lid open. */
+-	if (!panel || !READ_ONCE(dcp->clamshell_panel_away) || !iomfb_v14_7_lid_open(dcp))
 +	/* Only once the display let go and IOMFB heard the lid open. */
 +	if (!panel || !READ_ONCE(dcp->clamshell_panel_away) ||
 +	    READ_ONCE(dcp->active_typec_route) || !iomfb_v14_7_lid_open(dcp))
-+		return;
-+	WRITE_ONCE(dcp->clamshell_panel_away, false);
-+	WRITE_ONCE(panel->connected, true);
-+	dcp_queue_hotplug(panel);
-+	dev_info(dcp->dev, "lid open: %s connected again\n", panel->base.name);
+ 		return;
+ 	WRITE_ONCE(dcp->clamshell_panel_away, false);
+ 	WRITE_ONCE(panel->connected, true);
+ 	dcp_queue_hotplug(panel);
+ 	dev_info(dcp->dev, "lid open: %s connected again\n", panel->base.name);
++	/* a held display after it, so that it is paired on its own */
++	if (READ_ONCE(dcp_clamshell_held))
++		mod_delayed_work(system_wq, &dcp_clamshell_hold_work,
++				 msecs_to_jiffies(200));
 +}
 +
++/*
++ * Should @connector, a Type-C connector that has just come up, still read
++ * disconnected (see DCP_CLAMSHELL_HOLD_MS)? Only one the compositor has
++ * not seen connected and that could be paired with the internal pipe's CRTC.
++ */
++bool dcp_clamshell_hold_connector(struct apple_connector *connector)
++{
++	struct apple_dcp *dcp = READ_ONCE(dcp_lid_dcp);
++
++	if (!dcp || !dcp->crtc || connector == dcp->fixed_connector ||
++	    connector->base.status == connector_status_connected ||
++	    !(connector->candidate_crtcs & BIT(drm_crtc_index(&dcp->crtc->base))) ||
++	    atomic_read(&dcp_lid_closed) != 0 ||
++	    !READ_ONCE(dcp->clamshell_panel_away) ||
++	    !time_before(jiffies, READ_ONCE(dcp_clamshell_hold_until)))
++		return false;
++	if (xchg(&dcp_clamshell_held, connector) != connector)
++		dev_info(dcp->dev, "lid open: %s reads disconnected until %s is connected again\n",
++			 connector->base.name,
++			 dcp->fixed_connector ? dcp->fixed_connector->base.name : "the panel");
++	return true;
++}
++
++/* The panel's connector is back, or the hold ran out: report the display. */
++static void dcp_clamshell_hold_work_fn(struct work_struct *work)
++{
++	struct apple_connector *held = xchg(&dcp_clamshell_held, NULL);
++	struct apple_dcp *dcp = READ_ONCE(dcp_lid_dcp);
++
++	if (!held)
++		return;
++	if (dcp && READ_ONCE(dcp->clamshell_panel_away))
++		dev_info(dcp->dev, "lid open: %s connected after %u ms without the panel\n",
++			 held->base.name, DCP_CLAMSHELL_HOLD_MS);
++	dcp_queue_hotplug(held);
+ }
+ 
  static void dcp_lid_event(struct input_handle *handle, unsigned int type,
- 			  unsigned int code, int value)
- {
-@@ -1426,6 +1495,8 @@ static void dcp_lid_stop(struct apple_dcp *dcp)
+@@ -1468,9 +1581,13 @@ static void dcp_lid_stop(struct apple_dcp *dcp)
+ 	}
+ 	input_unregister_handler(&dcp_lid_handler);
+ 	cancel_work_sync(&dcp_lid_work);
++	cancel_delayed_work_sync(&dcp_clamshell_hold_work);
++	WRITE_ONCE(dcp_clamshell_held, NULL);
  	atomic_set(&dcp_lid_closed, -1);
  }
  
@@ -346,7 +444,7 @@ index cbf563501..7ca2181cc 100644
  /* After the panel started, which the DRM device does not wait for. */
  static void dcp_clamshell_start(struct work_struct *work)
  {
-@@ -1433,6 +1504,7 @@ static void dcp_clamshell_start(struct work_struct *work)
+@@ -1478,6 +1595,7 @@ static void dcp_clamshell_start(struct work_struct *work)
  
  	if (iomfb_v14_7_clamshell_start(dcp))
  		return;
@@ -354,18 +452,28 @@ index cbf563501..7ca2181cc 100644
  	dcp_lid_start(dcp);
  }
  
-@@ -1740,6 +1812,10 @@ void dcp_poweroff(struct platform_device *pdev)
+@@ -1790,7 +1908,11 @@ void dcp_poweroff(struct platform_device *pdev)
  	cancel_delayed_work(&dcp->swap_watchdog_wq);
  	if (dcp->avep)
  		av_service_disconnect(dcp);
-+	/* The CRTC a Type-C display let go of: its panel can come back now. */
-+	if (dcp->clamshell && READ_ONCE(dcp->clamshell_panel_away) &&
-+	    !READ_ONCE(dcp->active_typec_route))
-+		mod_delayed_work(system_wq, &dcp->clamshell_panel_work, 0);
- 
- 	/*
- 	 * The display this CRTC was powered on for has been unplugged since:
-@@ -2430,6 +2506,13 @@ static void dcp_comp_unbind(struct device *dev, struct device *main, void *data)
+-	/* The panel's CRTC is off; with the lid open it can come back. */
++	/*
++	 * The CRTC a Type-C display let go of: its panel can come back now,
++	 * or, while the lid work is still taking that display's route down,
++	 * once it has (see dcp_lid_work_fn()).
++	 */
+ 	if (dcp->clamshell) {
+ 		WRITE_ONCE(dcp->clamshell_crtc_on, false);
+ 		if (READ_ONCE(dcp->clamshell_panel_away))
+@@ -2483,6 +2605,7 @@ static void dcp_comp_unbind(struct device *dev, struct device *main, void *data)
+ 			/* Bind's wait_ready enabled it, as for any HDMI port. */
+ 			if (dcp->hdmi_hpd_irq)
+ 				disable_irq(dcp->hdmi_hpd_irq);
++			dcp_disable_typec_work(dcp, true);
+ 			disable_delayed_work_sync(&dcp->external_retry_wq);
+ 			disable_delayed_work_sync(&dcp->swap_watchdog_wq);
+ 			disable_work_sync(&dcp->vblank_wq);
+@@ -2490,6 +2613,11 @@ static void dcp_comp_unbind(struct device *dev, struct device *main, void *data)
  		if (dcp->clamshell) {
  			cancel_work_sync(&dcp->clamshell_start_work);
  			dcp_lid_stop(dcp);
@@ -374,23 +482,21 @@ index cbf563501..7ca2181cc 100644
 +				WRITE_ONCE(dcp->clamshell_free, false);
 +				dcp_typec_pipeline_changed(dcp);
 +			}
-+			cancel_delayed_work_sync(&dcp->clamshell_panel_work);
-+			dcp_disable_typec_work(dcp, true);
+ 			cancel_delayed_work_sync(&dcp->clamshell_panel_work);
+ 			dcp_disable_typec_work(dcp, true);
  		}
- 		iomfb_v14_7_unbind(dcp);
- 		return;
-@@ -2836,8 +2919,10 @@ static int dcp_platform_probe_pipe(struct platform_device *pdev)
- 	}
- 	/* J613: the panel's pipe with a Type-C route the display gate enabled. */
- 	dcp->clamshell = dcp_is_v14_panel(dcp) && dcp->nr_typec_routes;
--	if (dcp->clamshell)
-+	if (dcp->clamshell) {
- 		INIT_WORK(&dcp->clamshell_start_work, dcp_clamshell_start);
-+		INIT_DELAYED_WORK(&dcp->clamshell_panel_work, dcp_clamshell_panel_work);
-+	}
- 
- 	/*
- 	 * The manual external path stays out of the panel's DRM device. A
+diff --git a/drivers/gpu/drm/apple/dcp.h b/drivers/gpu/drm/apple/dcp.h
+index 2c73c927e..e0f029c66 100644
+--- a/drivers/gpu/drm/apple/dcp.h
++++ b/drivers/gpu/drm/apple/dcp.h
+@@ -47,6 +47,7 @@ int dcp_get_connector_type(struct platform_device *pdev);
+ bool dcp_fw_compat_is_12_x(struct platform_device *pdev);
+ bool dcp_fw_compat_is_14_7(struct platform_device *pdev);
+ bool dcp_ext_unusable(struct platform_device *pdev);
++bool dcp_clamshell_hold_connector(struct apple_connector *connector);
+ unsigned long* dcp_get_iomfb_surfaces(struct platform_device *pdev);
+ int dcp_start(struct platform_device *pdev);
+ int dcp_wait_ready(struct platform_device *pdev, u64 timeout);
 diff --git a/drivers/gpu/drm/apple/dptxep.c b/drivers/gpu/drm/apple/dptxep.c
 index 2fc97c208..8949fa446 100644
 --- a/drivers/gpu/drm/apple/dptxep.c
@@ -449,10 +555,10 @@ index 40f410828..4746cf9f2 100644
  			dcp->modes_admitted = true;
  			dcp->modes_provisional = false;
 diff --git a/drivers/gpu/drm/apple/iomfb_v14_7.c b/drivers/gpu/drm/apple/iomfb_v14_7.c
-index 68e5ce34e..b471ae465 100644
+index 35804bd35..6bace2fd6 100644
 --- a/drivers/gpu/drm/apple/iomfb_v14_7.c
 +++ b/drivers/gpu/drm/apple/iomfb_v14_7.c
-@@ -200,6 +200,17 @@ struct apple_dcp_v14 {
+@@ -194,6 +194,17 @@ struct apple_dcp_v14 {
  	u32 lid;
  	bool panel_blank;
  	bool panel_off;
@@ -470,7 +576,7 @@ index 68e5ce34e..b471ae465 100644
  
  	/*
  	 * An external processor: no panel. Its modes come from the
-@@ -875,6 +886,17 @@ static int dcp_v14_external_callback(struct apple_dcp_v14 *v14, u32 tag, const u
+@@ -869,6 +880,17 @@ static int dcp_v14_external_callback(struct apple_dcp_v14 *v14, u32 tag, const u
  	return 0;
  }
  
@@ -488,7 +594,7 @@ index 68e5ce34e..b471ae465 100644
  /* Runs on the thread that owns the RPC stream; the lock is held. */
  static int dcp_v14_callback(void *cookie, u32 tag, const void *input, u32 in_size,
  			    void *output, u32 out_size)
-@@ -886,7 +908,7 @@ static int dcp_v14_callback(void *cookie, u32 tag, const void *input, u32 in_siz
+@@ -880,7 +902,7 @@ static int dcp_v14_callback(void *cookie, u32 tag, const void *input, u32 in_siz
  	u32 count, offset, service, key_offset, id;
  	int ret;
  
@@ -497,7 +603,7 @@ index 68e5ce34e..b471ae465 100644
  		ret = dcp_v14_external_callback(v14, tag, in, in_size, out, out_size);
  		if (ret != -ENOENT)
  			return ret;
-@@ -2311,6 +2333,7 @@ static int dcp_v14_mode(struct apple_dcp *dcp, struct apple_dcp_v14 *v14)
+@@ -2343,6 +2365,7 @@ static int dcp_v14_mode(struct apple_dcp *dcp, struct apple_dcp_v14 *v14)
  	kfree(modes);
  	if (!selected)
  		return -ENOMEM;
@@ -505,7 +611,7 @@ index 68e5ce34e..b471ae465 100644
  	mutex_lock(&dcp->modes_lock);
  	kfree(dcp->modes);
  	dcp->modes = selected;
-@@ -2399,7 +2422,7 @@ static int dcp_v14_ctm_locked(struct apple_dcp_v14 *v14,
+@@ -2431,7 +2454,7 @@ static int dcp_v14_ctm_locked(struct apple_dcp_v14 *v14,
  	__le32 status = 0;
  	int i, ret;
  
@@ -514,7 +620,17 @@ index 68e5ce34e..b471ae465 100644
  	    (v14->ctm_valid && !state->color_mgmt_changed &&
  	     !state->mode_changed && !state->active_changed))
  		return 0;
-@@ -2457,7 +2480,7 @@ static bool dcp_v14_swap_admit(void *cookie)
+@@ -2486,7 +2509,8 @@ static bool dcp_v14_external_described(struct apple_dcp_v14 *v14);
+  */
+ static bool dcp_v14_panel_dark(struct apple_dcp_v14 *v14)
+ {
+-	return !v14->external && (READ_ONCE(v14->panel_off) || READ_ONCE(v14->lid) == 2);
++	return !v14->external && !READ_ONCE(v14->typec) &&
++	       (READ_ONCE(v14->panel_off) || READ_ONCE(v14->lid) == 2);
+ }
+ 
+ struct dcp_v14_swap_admission {
+@@ -2501,7 +2525,7 @@ static bool dcp_v14_swap_admit(void *cookie)
  	struct apple_dcp *dcp = READ_ONCE(v14->dcp);
  	struct apple_connector *connector;
  
@@ -523,7 +639,7 @@ index 68e5ce34e..b471ae465 100644
  		return true;
  	if (!dcp || READ_ONCE(v14->failed) || !READ_ONCE(v14->powered) ||
  	    !READ_ONCE(v14->mode_live) ||
-@@ -2478,12 +2501,15 @@ static int dcp_v14_swap(struct apple_dcp_v14 *v14, const u8 *surface, u64 iova,
+@@ -2522,12 +2546,15 @@ static int dcp_v14_swap(struct apple_dcp_v14 *v14, const u8 *surface, u64 iova,
  {
  	struct dcp_v14_swap_admission admission = { .v14 = v14 };
  	__le32 start[4] = {}, started[2] = {}, result[3];
@@ -541,7 +657,7 @@ index 68e5ce34e..b471ae465 100644
  		return -EINVAL;
  	swap = kmalloc(DCP_V14_SWAP_SIZE, GFP_KERNEL);
  	if (!swap)
-@@ -2517,7 +2543,7 @@ static int dcp_v14_swap(struct apple_dcp_v14 *v14, const u8 *surface, u64 iova,
+@@ -2571,7 +2598,7 @@ static int dcp_v14_swap(struct apple_dcp_v14 *v14, const u8 *surface, u64 iova,
  	 * refuses it, which ends nothing. Link failures stop the session in
  	 * dcp_v14_call() either way.
  	 */
@@ -550,7 +666,7 @@ index 68e5ce34e..b471ae465 100644
  		v14->failed = true;
  	mutex_unlock(&v14->lock);
  
-@@ -2551,7 +2577,7 @@ static bool dcp_v14_present(struct apple_dcp_v14 *v14, struct drm_framebuffer *f
+@@ -2605,7 +2632,7 @@ static bool dcp_v14_present(struct apple_dcp_v14 *v14, struct drm_framebuffer *f
  	ret = dcp_v14_swap(v14, fb ? surface : NULL, iova, fb ? width : 0,
  			   fb ? height : 0, dst_y, ctm_state);
  	elapsed = ktime_get_ns() - start;
@@ -559,7 +675,7 @@ index 68e5ce34e..b471ae465 100644
  		/* Refused before it was taken: the old framebuffer stays on screen. */
  		if (fb)
  			drm_framebuffer_put(fb);
-@@ -2842,10 +2868,60 @@ static int dcp_v14_external_modeset(struct apple_dcp *dcp, struct drm_crtc_state
+@@ -2902,13 +2929,77 @@ static int dcp_v14_external_modeset(struct apple_dcp *dcp, struct drm_crtc_state
  	return 0;
  }
  
@@ -611,6 +727,8 @@ index 68e5ce34e..b471ae465 100644
 +	return ret;
 +}
 +
++static void dcp_v14_panel_on_locked(struct apple_dcp_v14 *v14);
++
  int iomfb_v14_7_modeset(struct apple_dcp *dcp, struct drm_crtc_state *crtc_state)
  {
  	if (dcp->external)
@@ -620,7 +738,22 @@ index 68e5ce34e..b471ae465 100644
  	/* The firmware keeps the timing it booted with, which is the only mode. */
  	if (!lookup_mode(dcp, &crtc_state->mode, NULL))
  		return -EINVAL;
-@@ -2859,6 +2935,7 @@ void iomfb_v14_7_flush(struct apple_dcp *dcp, struct drm_crtc *crtc,
++	/*
++	 * J613: a CRTC the display on the Type-C route let go of can be given
++	 * to the panel without being switched off and on: power the panel on
++	 * here too, once the lid is open.
++	 */
++	if (dcp->v14 && READ_ONCE(dcp->v14->clamshell) && READ_ONCE(dcp->v14->panel_off)) {
++		mutex_lock(&dcp->v14->lock);
++		dcp->v14->panel_blank = false;
++		dcp_v14_panel_on_locked(dcp->v14);
++		mutex_unlock(&dcp->v14->lock);
++		dcp_clamshell_changed(dcp);
++	}
+ 	dcp_mode_set_valid(&dcp->mode_state, true);
+ 	return 0;
+ }
+@@ -2919,6 +3010,7 @@ void iomfb_v14_7_flush(struct apple_dcp *dcp, struct drm_crtc *crtc,
  	struct drm_plane_state *p = drm_atomic_get_new_plane_state(state, crtc->primary);
  	struct drm_crtc_state *cs = drm_atomic_get_new_crtc_state(state, crtc);
  	struct drm_framebuffer *fb;
@@ -628,12 +761,12 @@ index 68e5ce34e..b471ae465 100644
  
  	if (!p)
  		p = crtc->primary->state;
-@@ -2866,18 +2943,20 @@ void iomfb_v14_7_flush(struct apple_dcp *dcp, struct drm_crtc *crtc,
+@@ -2926,18 +3018,20 @@ void iomfb_v14_7_flush(struct apple_dcp *dcp, struct drm_crtc *crtc,
  		cs = crtc->state;
  	fb = p && p->visible ? p->fb : NULL;
- 	/* No swaps to a panel powered off with the lid closed. */
--	if (!dcp->external && dcp->v14 && READ_ONCE(dcp->v14->panel_off)) {
-+	if (!dcp->external && !typec && dcp->v14 && READ_ONCE(dcp->v14->panel_off)) {
+ 	/* No swaps to the panel while the lid is closed (dcp_v14_panel_dark()). */
+-	if (!dcp->external && dcp->v14 && dcp_v14_panel_dark(dcp->v14)) {
++	if (!dcp->external && !typec && dcp->v14 && dcp_v14_panel_dark(dcp->v14)) {
  		dcp_drm_crtc_vblank(dcp->crtc);
  		return;
  	}
@@ -656,7 +789,7 @@ index 68e5ce34e..b471ae465 100644
  		dcp_drm_crtc_vblank(dcp->crtc);
  		return;
  	}
-@@ -2885,7 +2964,7 @@ void iomfb_v14_7_flush(struct apple_dcp *dcp, struct drm_crtc *crtc,
+@@ -2945,7 +3039,7 @@ void iomfb_v14_7_flush(struct apple_dcp *dcp, struct drm_crtc *crtc,
  	if (dcp->v14 && dcp_v14_present(dcp->v14, fb,
  					 fb ? (dcp->external ? p->src_w >> 16 : fb->width) : 0,
  					 fb ? (dcp->external ? p->src_h >> 16 : fb->height) : 0,
@@ -665,7 +798,25 @@ index 68e5ce34e..b471ae465 100644
  		dcp_drm_crtc_page_flip(dcp, ktime_get());
  	else
  		dcp_v14_cancel_event(dcp);
-@@ -2910,19 +2989,114 @@ static void dcp_v14_panel_off_locked(struct apple_dcp_v14 *v14)
+@@ -2962,7 +3056,7 @@ static void dcp_v14_panel_off_locked(struct apple_dcp_v14 *v14)
+ {
+ 	int ret;
+ 
+-	if (v14->lid != 2 || v14->panel_off || v14->failed)
++	if (v14->lid != 2 || v14->typec || v14->panel_off || v14->failed)
+ 		return;
+ 	ret = dcp_v14_power_call(v14, false);
+ 	if (!ret)
+@@ -2980,7 +3074,7 @@ static void dcp_v14_panel_on_locked(struct apple_dcp_v14 *v14)
+ {
+ 	int ret;
+ 
+-	if (v14->lid == 2 || !v14->panel_off || v14->failed)
++	if (v14->lid == 2 || v14->typec || !v14->panel_off || v14->failed)
+ 		return;
+ 	ret = dcp_v14_power_call(v14, true);
+ 	if (!ret) {
+@@ -2993,24 +3087,120 @@ static void dcp_v14_panel_on_locked(struct apple_dcp_v14 *v14)
  /*
   * J613: the internal pipe has a Type-C route, which only a powered-off panel
   * leaves free; from now on the lid state counts (iomfb_v14_7_set_lid()).
@@ -699,19 +850,25 @@ index 68e5ce34e..b471ae465 100644
  	return 0;
  }
  
++/*
++ * The pipe is free for a Type-C display: the lid is closed, the panel off,
++ * and its CRTC off as well, so that the display that takes the pipe does
++ * not share the CRTC with a panel the compositor still drives.
++ */
 +bool iomfb_v14_7_clamshell_panel_off(struct apple_dcp *dcp)
 +{
 +	struct apple_dcp_v14 *v14 = dcp->v14;
 +
 +	return v14 && READ_ONCE(v14->clamshell) && READ_ONCE(v14->lid) == 2 &&
-+	       READ_ONCE(v14->panel_off) && !READ_ONCE(v14->failed);
++	       READ_ONCE(v14->panel_off) && READ_ONCE(v14->panel_blank) &&
++	       !READ_ONCE(v14->failed);
 +}
 +
-+bool iomfb_v14_7_lid_open(struct apple_dcp *dcp)
-+{
-+	return dcp->v14 && READ_ONCE(dcp->v14->lid) == 1;
-+}
-+
+ bool iomfb_v14_7_lid_open(struct apple_dcp *dcp)
+ {
+ 	return dcp->v14 && READ_ONCE(dcp->v14->lid) == 1;
+ }
+ 
 +void iomfb_v14_7_typec_attach(struct apple_dcp *dcp)
 +{
 +	struct apple_dcp_v14 *v14 = dcp->v14;
@@ -780,9 +937,27 @@ index 68e5ce34e..b471ae465 100644
  /*
   * Tells the panel's IOMFB the lid state, as macOS does (A475, one u32: 1
   * open, 2 closed; no reply). IOMFB keeps the value and hands it to its DPTX
-@@ -2960,8 +3134,11 @@ void iomfb_v14_7_poweron(struct apple_dcp *dcp)
+@@ -3031,7 +3221,7 @@ void iomfb_v14_7_set_lid(struct apple_dcp *dcp, bool closed)
+ 	if (!v14 || !READ_ONCE(v14->clamshell))
+ 		return;
+ 	if (closed && READ_ONCE(v14->lid) != 2 && !READ_ONCE(v14->panel_off) &&
+-	    !READ_ONCE(v14->panel_blank))
++	    !READ_ONCE(v14->panel_blank) && !READ_ONCE(v14->typec))
+ 		dcp_v14_present(v14, NULL, 0, 0, 0, NULL);
+ 	mutex_lock(&v14->lock);
+ 	if (v14->failed)
+@@ -3049,7 +3239,7 @@ void iomfb_v14_7_set_lid(struct apple_dcp *dcp, bool closed)
+ 		/*
+ 		 * A panel CRTC that was never switched on (the lid was closed
+ 		 * at boot, and the panel's connector has read disconnected
+-		 * since) is as blank as one switched off.
++		 * since) is as blank as one switched off: the pipe is free.
+ 		 */
+ 		if (!READ_ONCE(dcp->clamshell_crtc_on))
+ 			v14->panel_blank = true;
+@@ -3064,8 +3254,11 @@ void iomfb_v14_7_poweron(struct apple_dcp *dcp)
+ {
  	struct apple_dcp_v14 *v14 = dcp->v14;
- 	int ret;
  
 -	/* The panel stays on; the next swap shows the plane again. */
 -	if (dcp->external || !v14 || !v14->started)
@@ -794,16 +969,16 @@ index 68e5ce34e..b471ae465 100644
  		return;
  	mutex_lock(&v14->lock);
  	v14->panel_blank = false;
-@@ -2975,6 +3152,8 @@ void iomfb_v14_7_poweron(struct apple_dcp *dcp)
- 		dev_info(dcp->dev, "panel on (A472(1)): %d\n", ret);
- 	}
+@@ -3079,6 +3272,8 @@ void iomfb_v14_7_poweron(struct apple_dcp *dcp)
+ 		dev_warn_once(dcp->dev, "panel CRTC on with the lid closed: the panel stays off until the lid opens\n");
+ 	dcp_v14_panel_on_locked(v14);
  	mutex_unlock(&v14->lock);
 +	if (v14->clamshell)
 +		dcp_clamshell_changed(dcp);
  }
  
  void iomfb_v14_7_poweroff(struct apple_dcp *dcp)
-@@ -2992,6 +3171,12 @@ void iomfb_v14_7_poweroff(struct apple_dcp *dcp)
+@@ -3096,6 +3291,12 @@ void iomfb_v14_7_poweroff(struct apple_dcp *dcp)
  		dcp_mode_invalidate(&dcp->mode_state);
  		return;
  	}
@@ -816,7 +991,7 @@ index 68e5ce34e..b471ae465 100644
  	/*
  	 * Blank to black; the panel and the DCP stay powered, unless the lid
  	 * is closed (J613): then the panel is powered off.
-@@ -3004,5 +3189,7 @@ void iomfb_v14_7_poweroff(struct apple_dcp *dcp)
+@@ -3108,5 +3309,7 @@ void iomfb_v14_7_poweroff(struct apple_dcp *dcp)
  		if (v14->clamshell)
  			dcp_v14_panel_off_locked(v14);
  		mutex_unlock(&v14->lock);
@@ -825,17 +1000,20 @@ index 68e5ce34e..b471ae465 100644
  	}
  }
 diff --git a/drivers/gpu/drm/apple/iomfb_v14_7.h b/drivers/gpu/drm/apple/iomfb_v14_7.h
-index e51a07dcd..8fb55e4b0 100644
+index ada6cdb78..b99d454cc 100644
 --- a/drivers/gpu/drm/apple/iomfb_v14_7.h
 +++ b/drivers/gpu/drm/apple/iomfb_v14_7.h
-@@ -62,6 +62,18 @@ int iomfb_v14_7_start(struct apple_dcp *dcp);
+@@ -62,8 +62,21 @@ int iomfb_v14_7_start(struct apple_dcp *dcp);
   */
  int iomfb_v14_7_clamshell_start(struct apple_dcp *dcp);
  void iomfb_v14_7_set_lid(struct apple_dcp *dcp, bool closed);
-+/* The lid is closed and IOMFB was told so (A475(2)), and the panel is off. */
++/*
++ * The lid is closed and IOMFB was told so (A475(2)), and the panel and its
++ * CRTC are off: the pipe is free for a Type-C display.
++ */
 +bool iomfb_v14_7_clamshell_panel_off(struct apple_dcp *dcp);
-+/* IOMFB was told the lid is open (A475(1)). */
-+bool iomfb_v14_7_lid_open(struct apple_dcp *dcp);
+ /* IOMFB was told the lid is open (A475(1)). */
+ bool iomfb_v14_7_lid_open(struct apple_dcp *dcp);
 +/*
 + * The pipe drives the display on its Type-C route from _typec_attach() to
 + * _typec_detach(), which gives the catalog back to the panel;

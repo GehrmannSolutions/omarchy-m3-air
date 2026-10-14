@@ -15,16 +15,15 @@ crossbar is active ("Modeset done, but pipe not enabled"), and timings are set t
 ## Phase 2 (works, in our daily kernel since 2026-10-14)
 
 The same behaviour as a set on top of the series:
-[../kernel/patches-clamshell/](../kernel/patches-clamshell/) (patches 0013–0023, unsigned work in
-progress), the device tree from that set in boot.bin ([../boot/](../boot/)), and the desktop helper
+[../kernel/patches-clamshell/](../kernel/patches-clamshell/) (six signed patches on top of
+[omacom/linux-aurora#114](https://github.com/omacom/linux-aurora/pull/114)), the device tree from that set in boot.bin ([../boot/](../boot/)), and the desktop helper
 [../desktop/lid-policy/](../desktop/lid-policy/).
 
-**Next (2026-10-14):** `patches-clamshell/` is the r12 state and still records how it got there (later
-patches rework earlier ones). It is being consolidated into six patches on top of the maintainer's
-version of the series ([omacom/linux-aurora#114](https://github.com/omacom/linux-aurora/pull/114)),
-in its style: the new route is described but disabled in the device tree and turned on only by the
-display gate, behind the boot loader's marker. Then another test round and sign-off; it will be
-offered upstream only after #114 has landed.
+**Consolidated (2026-10-14):** the eleven experimental patches 0013–0023 (r12) were rebuilt on top
+of #114, in its style (the new route is described but disabled in the device tree and turned on only
+by the display gate, behind the boot loader's marker), and split by idea into six patches. The full
+test round below was repeated on that kernel with the same results; the patches are signed off and
+will be offered upstream once #114 has landed.
 
 ### How it works
 
@@ -51,7 +50,7 @@ offered upstream only after #114 has landed.
   closed laptop the moment it counts no external display. The lid-policy helper takes the lid
   switch from logind and waits 10 s before it locks and suspends.
 
-### Test results (test kernels r11/r12 + lid-policy)
+### Test results (test kernels r11/r12 + lid-policy; repeated on the consolidated set on #114, 2026-10-14)
 
 | Test | Result |
 |---|---|
@@ -64,6 +63,7 @@ offered upstream only after #114 has landed.
 | Front display on `dcpext`, lid closed (nothing moves), rear display arrives → move | ✅ r12, ~3 s without an external display bridged by lid-policy |
 | Suspend with the lid closed and both displays, wake by opening the lid | ✅ r12: locked before suspend, panel and rear display back at once, front display waits (lid open). A USB keyboard cannot wake the Mac from s2idle, so a resume with the lid still closed cannot be tested |
 | Boot with the lid closed, both displays plugged in | ✅ r12: panel never powered, rear display on `dcpext`, front display on the internal pipe |
+| Repeated on #114 + the six consolidated patches | ✅ all of the above (lid open: both ports, waiting, takeover both ways; lid closed: 4 cycles, front display ~2.5 s after closing, panel connected 0–100 ms after opening; waiting rear display; move with the lid closed; suspend; boot with the lid closed, front display on the internal pipe without a move) |
 
 ### What went wrong on the way (and why the design looks like this)
 
