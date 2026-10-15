@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# SPDX-FileCopyrightText: 2026 Marius Gehrmann
 # SPDX-License-Identifier: MIT
 # Fay (2026-10-13): lid policy for Omarchy on the MacBook Air M3 (J613).
 #
@@ -14,6 +13,14 @@
 # period: lid closed and no external display for FAY_LID_GRACE seconds (default
 # 10) -> lock (omarchy-system-lock) and suspend. The unit runs this under
 # systemd-inhibit, so if it stops, logind's own lid handling is back at once.
+#
+# 2026-10-16 (Marius): on the charger a closed lid only locks, it does not
+# suspend (bed, sofa: there is always a charger). Pulling the charger while the
+# lid stays closed suspends after the same grace period. With an external
+# display nothing happens, as before.
+#   lid closed, external display          -> nothing
+#   lid closed, no external, charger      -> lock (once per closing)
+#   lid closed, no external, no charger   -> lock and suspend after the grace
 #
 # FAY_LID_DRYRUN=1 logs what it would do instead of suspending.
 # Journal: journalctl --user -t fay-lid-policy
@@ -44,17 +51,52 @@ external_display() {
 
 suspends() { cat /sys/power/suspend_stats/success 2>/dev/null || echo 0; }
 
+# The SMC's AC input (a USB-C charger or a display that powers the Mac).
+on_charger() {
+  local s
+  for s in /sys/class/power_supply/*/; do
+    [[ $(<"$s/type") == Mains ]] 2>/dev/null || continue
+    [[ $(<"$s/online") == 1 ]] 2>/dev/null && return 0
+  done
+  return 1
+}
+
 mode=""; [[ $DRYRUN != 0 ]] && mode=" (dry run)"
-log "started: lid closed + no external display for ${GRACE}s -> lock and suspend$mode"
-since=
+log "started: lid closed + no external display for ${GRACE}s -> lock; and suspend unless on the charger$mode"
+since=       # lid closed without an external display since (seconds)
+locked=      # locked for this closing already (on the charger)
 while sleep 1; do
   if lid_closed && ! external_display; then
     now=$(date +%s)
     if [[ -z $since ]]; then
       since=$now
-      log "lid closed, no external display: suspending in ${GRACE}s unless one comes back"
+      if on_charger; then
+        log "lid closed, no external display, on the charger: locking in ${GRACE}s, no suspend"
+      else
+        log "lid closed, no external display: suspending in ${GRACE}s unless one comes back"
+      fi
     fi
     (( now - since >= GRACE )) || continue
+    if on_charger; then
+      if [[ -z $locked ]]; then
+        if [[ $DRYRUN != 0 ]]; then
+          log "dry run: would lock now (on the charger, no suspend)"
+        else
+          log "on the charger: locking, not suspending"
+          omarchy-system-lock >/dev/null 2>&1 || true
+        fi
+        locked=1
+      fi
+      continue
+    fi
+    # No charger (never had one, or it was pulled while closed): the grace
+    # counts from the moment the charger went.
+    if [[ -n $locked ]]; then
+      log "charger removed with the lid closed: suspending in ${GRACE}s unless it comes back"
+      locked=
+      since=$now
+      continue
+    fi
     if [[ $DRYRUN != 0 ]]; then
       log "dry run: would lock and suspend now"
       since=
@@ -71,8 +113,10 @@ while sleep 1; do
       [[ $(suspends) != "$before" ]] && break
     done
     since=
+    locked=
   elif [[ -n $since ]]; then
     lid_closed && log "external display back: not suspending" || log "lid open: not suspending"
     since=
+    locked=
   fi
 done

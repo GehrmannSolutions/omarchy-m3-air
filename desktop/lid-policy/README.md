@@ -1,11 +1,17 @@
-# lid-policy (active, 2026-10-13)
+# lid-policy (active, 2026-10-13; charger rule 2026-10-16)
 
 User service `fay-lid-policy.service` + script `fay-lid-policy`. It takes the lid switch from
-logind and applies the same rule as logind's defaults, with a grace period:
+logind and applies logind's default rule with a grace period, plus a charger rule:
 
-- lid closed and **no external display for 10 s** → lock (`omarchy-system-lock`) and suspend;
+- lid closed and **no external display for 10 s**, on battery → lock (`omarchy-system-lock`) and suspend;
+- lid closed and no external display, **on the charger** → lock only, no suspend (working in bed or on
+  the sofa with a charger there; also keeps the machine awake overnight);
+- charger pulled while the lid stays closed → suspend 10 s later, unless it comes back;
 - lid closed with an external display → nothing (clamshell use);
 - an external display coming back or the lid opening within the 10 s → nothing.
+
+"Charger" is the SMC's AC input (`/sys/class/power_supply/*` of type `Mains`, online), which also
+counts a display that powers the Mac over USB-C.
 
 ## Why
 
@@ -36,4 +42,5 @@ systemctl --user disable --now fay-lid-policy.service   # remove
 Tested on 2026-10-13 with the test kernel r11: lid closed without a display → locked, suspended
 after the grace period; lid closed with one or two external displays → no suspend; a display moving
 to the internal pipeline (~4.5 s without an external display) → "external display back: not
-suspending".
+suspending". Charger rule tested on 2026-10-16: lid closed on a USB-C PD charger without a display →
+locked after 10 s, no suspend.
