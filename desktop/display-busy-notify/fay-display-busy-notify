@@ -1,33 +1,36 @@
 #!/usr/bin/env bash
 # SPDX-FileCopyrightText: 2026 Marius Gehrmann
 # SPDX-License-Identifier: MIT
-# Fay (2026-10-13): desktop hint when a second external display has to wait.
+# Fay (2026-10-13, 2026-10-15): desktop hint when a second external display has to wait.
 # The M3 MacBook Air drives one external display at a time with the lid open. A
-# second one stays dark. With the Phase-2 kernel it turns on by itself when the
-# lid closes (the internal pipe then drives one of them) or when the first one
-# is unplugged; the kernel says "... waits for an external display pipeline ...;
-# unplug that one and this one takes over" (appledrm). The v2 kernel (and
-# omacom/linux-aurora#114) still says "to switch, unplug that one, then plug this
-# one in again", but there too the waiting display takes over by itself once the
-# other one is unplugged (tested 2026-10-14). Older kernels only log the USB-C
-# controller's -EBUSY. Texts in English (2026-10-13, Marius).
+# second one stays dark and turns on by itself when the first one is unplugged.
+# With the lid-closed set (kernel/patches-clamshell/ + the fay-lid-policy user
+# service) it also turns on when the lid closes (the internal pipe then drives one
+# of them). Kernel lines (appledrm):
+#   integration/aurora since #114 was merged (2026-10-15), with or without the
+#   lid-closed set: "display on X waits for a free external display pipeline
+#   (...); it lights up on its own when one of those displays is unplugged"
+#   our earlier lid-closed set: "... waits for an external display pipeline:
+#   ...; unplug that one and this one takes over"
+#   the v2 series / #114 before the merge: "... waits for an external display
+#   pipeline ... then plug this one in again" (it takes over by itself as well)
+# Older kernels only log the USB-C controller's -EBUSY. Texts in English
+# (2026-10-13, Marius).
 # Runs as the user service fay-display-busy-notify.service.
 set -uo pipefail
 
 last=0
 journalctl -k -f -n 0 -o cat | while IFS= read -r line; do
   case $line in
-    *"waits for an external display pipeline"*"takes over"*)
-      # Phase-2 kernel: with the lid closed the internal pipe drives a second display
+    *"display on "*" waits for "*"external display pipeline"*)
       port=${line#*display on }
       port=${port%% waits*}
-      hint="With the lid open, this Mac drives one external display at a time. This one turns on when you close the lid (then both work) or when you unplug the other one."
-      ;;
-    *"waits for an external display pipeline"*)
-      # v2 kernel: the waiting display takes over by itself when the other one goes
-      port=${line#*display on }
-      port=${port%% waits*}
-      hint="This Mac drives one external display at a time. This one turns on when you unplug the other one."
+      if [[ $line == *"takes over"* ]] || systemctl --user -q is-active fay-lid-policy.service; then
+        # the lid-closed set: with the lid closed the internal pipe drives a second display
+        hint="With the lid open, this Mac drives one external display at a time. This one turns on when you close the lid (then both work) or when you unplug the other one."
+      else
+        hint="This Mac drives one external display at a time. This one turns on when you unplug the other one."
+      fi
       ;;
     *"sn201202x"*"failed to configure Type-C connection: -16"*)
       port=""
