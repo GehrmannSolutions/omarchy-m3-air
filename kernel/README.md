@@ -6,7 +6,7 @@ displays with the lid closed.
 
 - **Base:** `omacom/linux-aurora`, branch `integration/aurora`, commit `80ee1e97`.
   Also applies cleanly to `67d8e916` (not built there).
-- **Git branch:** [`GehrmannSolutions/linux-aurora` `fay/aurora-j613-dp-v2`](https://github.com/GehrmannSolutions/linux-aurora/tree/fay/aurora-j613-dp-v2)
+- **Git branch:** [`GehrmannSolutions/linux-aurora` `tars/aurora-j613-dp-v2`](https://github.com/GehrmannSolutions/linux-aurora/tree/tars/aurora-j613-dp-v2)
   (same patches, review in [PR #1 there](https://github.com/GehrmannSolutions/linux-aurora/pull/1)).
 - **Upstream:** the maintainer carries the 12 patches, reworked, as draft
   [omacom/linux-aurora#114](https://github.com/omacom/linux-aurora/pull/114): there the kernel turns
@@ -82,7 +82,7 @@ zcat /proc/config.gz > .config                          # start from the running
 make LLVM=1 olddefconfig && make LLVM=1 -j8
 ```
 
-The scripts in `scripts/` are the ones we use on our machine (paths under `~/.cache/fay-build/`,
+The scripts in `scripts/` are the ones we use on our machine (paths under `~/.cache/tars-build/`,
 kernel installed next to the packaged one with its own GRUB entry, original kept as fallback). They
 check hashes and refuse to run on anything they do not expect; read them before adapting them.
 

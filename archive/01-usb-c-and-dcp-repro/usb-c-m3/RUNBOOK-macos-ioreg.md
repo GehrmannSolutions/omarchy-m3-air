@@ -33,11 +33,11 @@ Status: prepared, not started. Marius decides when to boot macOS.
    ```
 
    Look at `fay-display-extract.txt` and check it contains the display nodes. If it is
-   empty or only has unrelated entries, stop and tell Fay.
+   empty or only has unrelated entries, stop and tell TARS.
 5. **Hand over the result.** Copy `fay-display-extract.txt` to the exFAT stick `FAYTESTa`
    (empty test stick, the only one to use here). Do not copy the full dump.
 6. **Reboot into Omarchy** (Asahi boot picker, Linux).
-7. **Tell Fay.** Fay reads the extract, writes the m1n1 carveout and the DT values as
+7. **Tell TARS.** TARS reads the extract, writes the m1n1 carveout and the DT values as
    patches, and checks them against the PR #608 nodes.
 
 ## Notes

@@ -1,4 +1,4 @@
-# Steps for the hypervisor trace (target = Fay's Air, host = P15)
+# Steps for the hypervisor trace (target = TARS' Air, host = P15)
 
 Two machines: the M3 Air (target, runs macOS 14.8.x under m1n1) and the P15 (host, Omarchy
 Linux, USB-C cable to the Air's right-hand port). The employer-managed Air is not involved.
@@ -19,7 +19,7 @@ Linux, USB-C cable to the Air's right-hand port). The employer-managed Air is no
     sudo diskutil mount disk0s4          # partition label "EFI - M3 OM"
     cd /System/Volumes/Preboot/*/boot && cat active   # the active hash
     sudo cp /System/Volumes/Preboot/*/boot/$(cat /System/Volumes/Preboot/*/boot/active)/System/Library/Caches/com.apple.kernelcaches/kernelcache "/Volumes/EFI - M3 OM/kc-14.8.x.im4p"
-(Fay converts it on Linux to a Mach-O and hands it to the P15.)
+(TARS converts it on Linux to a Mach-O and hands it to the P15.)
 
 ## C. Recovery (1TR) for macOSTest only (Marius)
 1. Make macOSTest the startup disk (System Settings → Startup Disk), shut down.
@@ -33,11 +33,11 @@ Linux, USB-C cable to the Air's right-hand port). The employer-managed Air is no
 
 ## D. Trace (P15 + Air)
 1. P15: `git clone --branch v1.9.9 https://github.com/AsahiLinux/m1n1`, venv with `construct pyserial`,
-   copy `trace_atc0_dp_t8122.py` and the kernelcache Mach-O from Fay.
+   copy `trace_atc0_dp_t8122.py` and the kernelcache Mach-O from TARS.
 2. Air: boot macOSTest from the boot picker → m1n1 waits on USB (no picture beyond the logo is normal).
 3. P15: `sudo M1N1DEVICE=/dev/ttyACM0 venv/bin/python proxyclient/tools/run_guest.py -l fay-atc0-dp.log -m trace_atc0_dp_t8122.py kc-14.8.x.macho`
 4. When macOS is up: unplug/replug the monitor (Air left-rear port), keep it in ~30 s; stop; keep the log.
-5. Air: reboot into Linux (boot picker → the Asahi entry). Fay picks up the log.
+5. Air: reboot into Linux (boot picker → the Asahi entry). TARS picks up the log.
 
 ## Undo
 In macOS 27: delete the macOSTest volume (`sudo diskutil apfs deleteVolume <macOSTest volume>`).

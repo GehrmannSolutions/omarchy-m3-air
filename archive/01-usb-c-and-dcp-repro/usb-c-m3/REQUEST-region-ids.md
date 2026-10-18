@@ -8,7 +8,7 @@ Read only. Change nothing on macOS.
 
 m1n1 reserves display memory regions based on `region-id-NN` properties of the display
 nodes in Apple's device tree (ADT). Linux needs the exact entries, so that the carveout
-table for the M3 (t8122) can be written. Fay has the node names and addresses already
+table for the M3 (t8122) can be written. TARS has the node names and addresses already
 (see the memory repo, plan `2026-10-03-dcp-14x-port-PLAN.md`). These entries are missing.
 
 Deliver one text file that contains, for each display node:
@@ -44,9 +44,9 @@ and it already holds the earlier extract. Copy `~/Desktop/fay-region-ids.txt` to
 folder, under the name `fay-region-ids.txt`. Do not delete the other files on the stick.
 
 Fallback, only if the stick cannot be used: `python3 -m http.server 8000` in `~/Desktop`,
-and Marius sends the Mac's IP so Fay can fetch the file with `curl`.
+and Marius sends the Mac's IP so TARS can fetch the file with `curl`.
 
-## What Fay does with it
+## What TARS does with it
 
 Writes the t8122 carveout table for m1n1 from these entries, checks it against the PR #608
 DT nodes, and records the result in the plan. Nothing is installed without Marius's approval.

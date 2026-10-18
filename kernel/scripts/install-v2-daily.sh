@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-FileCopyrightText: 2026 Marius Gehrmann
 # SPDX-License-Identifier: MIT
-# Fay (2026-10-13): make the consolidated series v2 the daily kernel.
+# TARS (2026-10-13): make the consolidated series v2 the daily kernel.
 # Kernel 7.1.12-fay-v2 (branch fay/aurora-j613-dp-v2-daily = the 12 v2 patches + the local DPE
 # block for the GPU, build-v2/stage-v2) is installed side by side:
 #   /boot/vmlinuz-linux-aurora-fay-v2, /boot/initramfs-linux-aurora-fay-v2.img,
@@ -55,7 +55,7 @@ sudo depmod "$KVER"
 sudo rm -f /boot/vmlinuz-linux-aurora-fay-v2 /boot/initramfs-linux-aurora-fay-v2.img
 sudo install -m 0644 "$O/arch/arm64/boot/Image" /boot/vmlinuz-linux-aurora-fay-v2
 printf '%s\n' \
-  '# Fay (install-v2-daily.sh, removed by uninstall-v2-daily.sh): the T8122 dcpext Type-C routes' \
+  '# TARS (install-v2-daily.sh, removed by uninstall-v2-daily.sh): the T8122 dcpext Type-C routes' \
   '# need the display crossbar driver in the initramfs, or the panel'"'"'s DRM device waits for it.' \
   'if [[ ${KERNELVERSION:-} == *-fay-v2 ]]; then' \
   '  MODULES+=(mux-apple-display-crossbar)' \
@@ -82,7 +82,7 @@ NEW=$(sed -E \
 grep -q 'vmlinuz-linux-aurora-fay-v2 ' <<<"$NEW" && grep -q 'initramfs-linux-aurora-fay-v2.img' <<<"$NEW" || die "could not build the new entry"
 ! grep -qE 'fay-ext2|dcpext_pmp_record|dcpext_front|t8122_dcpext_trace|sync_syslog_print' <<<"$NEW" || die "new entry still has fay-ext2 bits"
 grep -q 'asahi.t8122_dpe_leak=1' <<<"$NEW" || die "new entry lacks asahi.t8122_dpe_leak=1"
-{ printf '#!/bin/sh\n# Fay: daily entry on fay-v2 (install-v2-daily.sh; undo: uninstall-v2-daily.sh), previous daily as fallback\nexec tail -n +4 $0\n'
+{ printf '#!/bin/sh\n# TARS: daily entry on fay-v2 (install-v2-daily.sh; undo: uninstall-v2-daily.sh), previous daily as fallback\nexec tail -n +4 $0\n'
   printf '%s\n' "$NEW" "$OLD"; } | sudo tee $DAILY >/dev/null
 sudo chmod 0755 $DAILY
 sudo grub-mkconfig -o /boot/grub/grub.cfg >/dev/null 2>&1 || die "grub-mkconfig failed (backup: $B)"

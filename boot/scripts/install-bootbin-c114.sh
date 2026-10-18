@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Fay (2026-10-14): test boot.bin for Phase 2 consolidated on omacom/linux-aurora#114
-# (plan: agents/fay/plans/2026-10-14-PLAN-phase2-consolidation.md):
+# TARS (2026-10-14): test boot.bin for Phase 2 consolidated on omacom/linux-aurora#114
+# (plan: agents/tars/plans/2026-10-14-PLAN-phase2-consolidation.md):
 #   our m1n1 (0dc65ef9, sets apple,t8122-dcpext-firmware-ready) + the DTBs built from
 #   fay/aurora-j613-clamshell-on-114 (#114 + P1-P6). Built by build-bootbin-c114.sh.
 #

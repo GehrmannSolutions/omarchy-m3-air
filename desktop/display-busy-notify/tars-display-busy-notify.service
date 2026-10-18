@@ -1,12 +1,12 @@
 # SPDX-FileCopyrightText: 2026 Marius Gehrmann
 # SPDX-License-Identifier: MIT
 [Unit]
-Description=Fay: bring the internal display back when Omarchy misses a lid open
+Description=TARS: hint when a second external display has to wait
 PartOf=graphical-session.target
 After=graphical-session.target
 
 [Service]
-ExecStart=%h/.local/bin/fay-lid-open-safety
+ExecStart=%h/.local/bin/tars-display-busy-notify
 Restart=on-failure
 RestartSec=5
 

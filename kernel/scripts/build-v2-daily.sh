@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-FileCopyrightText: 2026 Marius Gehrmann
 # SPDX-License-Identifier: MIT
-# Fay: build the daily kernel from the consolidated series v2 + the local DPE block
+# TARS: build the daily kernel from the consolidated series v2 + the local DPE block
 # (branch fay/aurora-j613-dp-v2-daily) into build-v2/stage-v2, kernel release 7.1.12-fay-v2.
 set -uo pipefail
 E=$(cd "$(dirname "$0")" && pwd)
@@ -19,5 +19,5 @@ KVER=$(cat $O/include/config/kernel.release)
 rm -rf "$E/stage-v2/lib/modules/$KVER"
 make O=$O INSTALL_MOD_PATH=$E/stage-v2 INSTALL_MOD_STRIP=1 modules_install > "$E/logs/modules_install-v2.log" 2>&1 || { echo modules_install failed; exit 1; }
 cd "$E" && { sha256sum build-v2/arch/arm64/boot/Image; find stage-v2/lib/modules/$KVER -type f | sort | xargs sha256sum; } > SHA256SUMS.v2
-git -C "$SRC" checkout -q fay/aurora-j613-dp-v2
+git -C "$SRC" checkout -q tars/aurora-j613-dp-v2
 echo DONE $KVER $(sha256sum build-v2/arch/arm64/boot/Image | cut -c1-16) $(wc -l < SHA256SUMS.v2)

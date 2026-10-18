@@ -1,6 +1,6 @@
 # lid-policy (active, 2026-10-13; charger rule 2026-10-16)
 
-User service `fay-lid-policy.service` + script `fay-lid-policy`. It takes the lid switch from
+User service `tars-lid-policy.service` + script `tars-lid-policy`. It takes the lid switch from
 logind and applies logind's default rule with a grace period, plus a charger rule:
 
 - lid closed and **no external display for 10 s**, on battery → lock (`omarchy-system-lock`) and suspend;
@@ -28,16 +28,16 @@ stops or crashes, the inhibitor goes with it and logind's own lid handling appli
 ## Install / remove
 
 ```sh
-install -m 0755 fay-lid-policy ~/.local/bin/
-install -m 0644 fay-lid-policy.service ~/.config/systemd/user/
-systemctl --user daemon-reload && systemctl --user enable --now fay-lid-policy.service
-systemd-inhibit --list | grep handle-lid-switch      # shows fay-lid-policy
+install -m 0755 tars-lid-policy ~/.local/bin/
+install -m 0644 tars-lid-policy.service ~/.config/systemd/user/
+systemctl --user daemon-reload && systemctl --user enable --now tars-lid-policy.service
+systemd-inhibit --list | grep handle-lid-switch      # shows tars-lid-policy
 
-systemctl --user disable --now fay-lid-policy.service   # remove
+systemctl --user disable --now tars-lid-policy.service   # remove
 ```
 
-`FAY_LID_GRACE=<seconds>` changes the grace period, `FAY_LID_DRYRUN=1` only logs what it would do
-(note: in dry-run mode a closed lid never suspends). Journal: `journalctl --user -t fay-lid-policy`.
+`TARS_LID_GRACE=<seconds>` changes the grace period, `TARS_LID_DRYRUN=1` only logs what it would do
+(note: in dry-run mode a closed lid never suspends). Journal: `journalctl --user -t tars-lid-policy`.
 
 Tested on 2026-10-13 with the test kernel r11: lid closed without a display → locked, suspended
 after the grace period; lid closed with one or two external displays → no suspend; a display moving

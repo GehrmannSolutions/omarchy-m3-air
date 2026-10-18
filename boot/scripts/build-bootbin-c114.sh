@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Fay (2026-10-14): test boot.bin for Phase 2 consolidated on #114 (plan:
-# agents/fay/plans/2026-10-14-PLAN-phase2-consolidation.md) into bootbin-c114/. No root.
+# TARS (2026-10-14): test boot.bin for Phase 2 consolidated on #114 (plan:
+# agents/tars/plans/2026-10-14-PLAN-phase2-consolidation.md) into bootbin-c114/. No root.
 #   m1n1: ours (0dc65ef9, sets apple,t8122-dcpext-firmware-ready), the m1n1.bin of bootbin-clamshell
 #   DTBs: every DTB of the installed set, from upstream/build3 built from upstream/pr114-src on
 #         branch fay/aurora-j613-clamshell-on-114 (#114 + P1-P6). A name the build lacks is an error.

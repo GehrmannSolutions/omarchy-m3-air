@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MIT
-# Fay (2026-10-13): lid policy for Omarchy on the MacBook Air M3 (J613).
+# TARS (2026-10-13): lid policy for Omarchy on the MacBook Air M3 (J613).
 #
 # logind suspends a closed laptop the moment it counts no external display, and
 # while the lid is closed it counts again after every event it handles. On this
@@ -10,7 +10,7 @@
 # lid switch from logind with a "handle-lid-switch" inhibitor and decide
 # themselves; this does the same for Omarchy, with the same rule as logind's
 # defaults (HandleLidSwitch=suspend, HandleLidSwitchDocked=ignore) plus a grace
-# period: lid closed and no external display for FAY_LID_GRACE seconds (default
+# period: lid closed and no external display for TARS_LID_GRACE seconds (default
 # 10) -> lock (omarchy-system-lock) and suspend. The unit runs this under
 # systemd-inhibit, so if it stops, logind's own lid handling is back at once.
 #
@@ -22,15 +22,15 @@
 #   lid closed, no external, charger      -> lock (once per closing)
 #   lid closed, no external, no charger   -> lock and suspend after the grace
 #
-# FAY_LID_DRYRUN=1 logs what it would do instead of suspending.
-# Journal: journalctl --user -t fay-lid-policy
-# Remove: systemctl --user disable --now fay-lid-policy.service
+# TARS_LID_DRYRUN=1 logs what it would do instead of suspending.
+# Journal: journalctl --user -t tars-lid-policy
+# Remove: systemctl --user disable --now tars-lid-policy.service
 set -uo pipefail
 
-GRACE=${FAY_LID_GRACE:-10}
-DRYRUN=${FAY_LID_DRYRUN:-0}
+GRACE=${TARS_LID_GRACE:-10}
+DRYRUN=${TARS_LID_DRYRUN:-0}
 
-log() { logger -t fay-lid-policy "$*"; }
+log() { logger -t tars-lid-policy "$*"; }
 
 lid_closed() {
   [[ $(busctl get-property org.freedesktop.login1 /org/freedesktop/login1 \

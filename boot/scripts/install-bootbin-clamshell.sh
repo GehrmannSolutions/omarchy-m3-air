@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # SPDX-FileCopyrightText: 2026 Marius Gehrmann
 # SPDX-License-Identifier: MIT
-# Fay (2026-10-13), Phase 2 of the clamshell work (decision A, device tree):
-# agents/fay/plans/2026-10-13-DECISION-phase2-dt.md.
+# TARS (2026-10-13), Phase 2 of the clamshell work (decision A, device tree):
+# agents/tars/plans/2026-10-13-DECISION-phase2-dt.md.
 # boot.bin gets J613 device trees whose internal DCP has a (disabled) Type-C
 # route to the left-front port, and a second endpoint on that port's port@3.
 # Same m1n1, same u-boot, same /etc/m1n1.conf options, same

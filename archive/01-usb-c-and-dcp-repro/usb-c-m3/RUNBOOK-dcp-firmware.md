@@ -50,7 +50,7 @@ So the work is driver work (DCP support for the 14.x firmware), not a missing fi
 
    Record `apple,firmware-version` and `apple,firmware-compat` for the DCP node(s)
    here. If there is no DCP node, record that too.
-4. **Tell Fay** the result.
+4. **Tell TARS** the result.
 
 Steps 3–5 of the first version (extraction, exFAT stick `FAYTESTa`, `asahi-fwextract`)
 are dropped. The stick is not needed for this.

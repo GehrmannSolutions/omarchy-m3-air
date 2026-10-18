@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-FileCopyrightText: 2026 Marius Gehrmann
 # SPDX-License-Identifier: MIT
-# Fay (2026-10-13), decision A in agents/fay/plans/2026-10-13-DECISION-boot-dt.md:
+# TARS (2026-10-13), decision A in agents/tars/plans/2026-10-13-DECISION-boot-dt.md:
 # 1. boot.bin gets the J613 device trees with the left-front USB-C port (dcpext
 #    route@1, ATC1 crossbar). Same m1n1, same u-boot, same /etc/m1n1.conf
 #    options; the other 113 DTBs and everything else unchanged.
@@ -42,10 +42,10 @@ sudo install -m 0644 "$F"/SHA256SUMS "$P.new"/SHA256SUMS
 sudo rm -rf "$P" && sudo mv "$P.new" "$P"
 
 sudo tee /etc/default/update-m1n1 >/dev/null <<'EOF'
-# Fay (2026-10-13): m1n1 and the device trees are pinned to the Fay build, so
+# TARS (2026-10-13): m1n1 and the device trees are pinned to the TARS build, so
 # that a package update rebuilds the boot.bin with dcpext and both USB-C display
 # routes (J613). The stock linux-aurora DTBs have no dcpext.
-# Undo: ~/.cache/fay-build/aurora/ext/uninstall-bootbin-front.sh
+# Undo: ~/.cache/tars-build/aurora/ext/uninstall-bootbin-front.sh
 # Previous content (aurora-sep) is in /var/lib/fay-backup/bootbin-front-*/update-m1n1.default
 M1N1=/usr/local/lib/fay-boot/m1n1.bin
 DTBS="/usr/local/lib/fay-boot/dtbs/*.dtb"

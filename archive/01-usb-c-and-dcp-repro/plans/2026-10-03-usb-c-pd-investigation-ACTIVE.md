@@ -2,7 +2,7 @@
 
 **Status: ACTIVE.** Diagnosis done, no fix applied yet.
 
-**Owner:** Fay (laptop session). **Created:** 2026-10-03.
+**Owner:** TARS (laptop session). **Created:** 2026-10-03.
 
 ## Goal
 

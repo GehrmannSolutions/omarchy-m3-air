@@ -12,5 +12,5 @@
 | omacom/m1n1 | the m1n1 change that sets the marker | not submitted: the fork inherits Asahi's no-AI rule; asked in #103 whether it applies |
 | Asahi Linux / m1n1 | – | not submitted: their policies forbid AI-assisted contributions |
 
-The patch series lives as branch `fay/aurora-j613-dp-v2` in
+The patch series lives as branch `tars/aurora-j613-dp-v2` in
 [GehrmannSolutions/linux-aurora](https://github.com/GehrmannSolutions/linux-aurora).

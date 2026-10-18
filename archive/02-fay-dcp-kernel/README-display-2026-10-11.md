@@ -4,7 +4,7 @@
 
 State: 2026-10-11. Machine: MacBook Air 13" M3 (J613, t8122), Omarchy on Asahi ALARM, DCP firmware 14.7.
 
-Everything here was developed with Claude Code (Fay) and is meant for this machine and for Omarchy Mac. It is **not** submittable to Asahi Linux (their policy forbids AI-made contributions, see `../fay-upstream-ai-policies.md`).
+Everything here was developed with Claude Code (TARS) and is meant for this machine and for Omarchy Mac. It is **not** submittable to Asahi Linux (their policy forbids AI-made contributions, see `../fay-upstream-ai-policies.md`).
 
 ## What works
 

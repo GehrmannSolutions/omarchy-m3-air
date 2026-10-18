@@ -1,0 +1,14 @@
+# SPDX-FileCopyrightText: 2026 Marius Gehrmann
+# SPDX-License-Identifier: MIT
+[Unit]
+Description=TARS: lid policy (lock and suspend when the lid is closed without an external display, with a grace period)
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+ExecStart=/usr/bin/systemd-inhibit --what=handle-lid-switch --who=tars-lid-policy --why="TARS lid policy: suspend after a grace period, see tars-lid-policy" --mode=block %h/.local/bin/tars-lid-policy
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target

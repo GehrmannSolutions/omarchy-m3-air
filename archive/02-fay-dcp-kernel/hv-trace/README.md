@@ -1,6 +1,6 @@
-# HV trace of DP alt mode on the M3 Air (Fay ↔ Mika)
+# HV trace of DP alt mode on the M3 Air (TARS ↔ Mika)
 
-Roles (updated 2026-10-10): target = Fay's Air (private Mac15,12; the other Air is employer-managed,
+Roles (updated 2026-10-10): target = TARS' Air (private Mac15,12; the other Air is employer-managed,
 no changes there) with an extra APFS volume running macOS 14.8.3, the only macOS the m1n1 hypervisor
 supports as a guest on M3. Host = Marius's PC (Linux) or, user-level only, the other Mac; it runs the
 m1n1 v1.9.9 proxyclient over a USB-C cable to the target's right-hand port. Monitor in the target's
@@ -21,6 +21,6 @@ Target steps (Marius/Mika on the target Mac):
    `bputil -nkcas` (macOSTest only), `csrutil disable`, then the `kmutil configure-boot` line above
    with the m1n1 binary copied to a reachable path.
 4. Kernelcache: /System/Volumes/Preboot/<uuid>/boot/<active hash>/System/Library/Caches/
-   com.apple.kernelcaches/kernelcache of macOSTest → IM4P → Mach-O; hand it to Fay.
-5. Boot macOSTest: m1n1 starts and waits for the host (proxy mode). Fay runs run_guest.py.
+   com.apple.kernelcaches/kernelcache of macOSTest → IM4P → Mach-O; hand it to TARS.
+5. Boot macOSTest: m1n1 starts and waits for the host (proxy mode). TARS runs run_guest.py.
 Undo: in 1TR delete the macOSTest volume (main macOS keeps its own boot policy).
