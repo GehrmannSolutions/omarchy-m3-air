@@ -25,8 +25,9 @@ journalctl -k -f -n 0 -o cat | while IFS= read -r line; do
     *"display on "*" waits for "*"external display pipeline"*)
       port=${line#*display on }
       port=${port%% waits*}
-      if [[ $line == *"takes over"* ]] || systemctl --user -q is-active tars-lid-policy.service; then
-        # the lid-closed set: with the lid closed the internal pipe drives a second display
+      if [[ $line == *"takes over"* ]]; then
+        # only a kernel with the lid-closed set (#127) says so: then the internal pipe drives a second display
+        # (the packaged aurora16 kernel logs the wait line without it, and a closed lid does not help there)
         hint="With the lid open, this Mac drives one external display at a time. This one turns on when you close the lid (then both work) or when you unplug the other one."
       else
         hint="This Mac drives one external display at a time. This one turns on when you unplug the other one."

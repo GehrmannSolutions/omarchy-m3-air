@@ -41,7 +41,7 @@ desktop helpers.
 | Suspend (s2idle) | works, but drains the battery overnight with the lid closed on battery ([#403](https://github.com/omacom/linux-aurora/issues/403)) |
 | CPU temperature limit | works (CPU thermal zones in the packaged device tree) |
 | Clock | starts at 1970 on every boot until NTP corrects it ([omarchy-mac#782](https://github.com/omacom/omarchy-mac/issues/782)) |
-| ISO keyboard | the `<>` key and the key left of 1 are swapped ([#350](https://github.com/omacom/linux-aurora/issues/350)) |
+| ISO keyboard | the `<>` key and the key left of 1 are swapped ([#350](https://github.com/omacom/linux-aurora/issues/350)); fixed here with `hid_apple` `iso_layout=1` ([desktop/iso-keyboard](desktop/iso-keyboard/)) |
 
 Details and the older test record: [docs/status.md](docs/status.md).
 

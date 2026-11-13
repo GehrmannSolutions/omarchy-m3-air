@@ -19,7 +19,7 @@ device trees, Limine. No own kernel, no own boot.bin. Same test displays as belo
 | new | Speakers, microphone, keyboard backlight | ✅ |
 | new | Hotplug memory leak | ✅ gone (5 hotplugs, +1.6 MB) |
 | new | Clock after boot | ❌ starts at 1970 until NTP ([omarchy-mac#782](https://github.com/omacom/omarchy-mac/issues/782)) |
-| new | ISO keyboard | ❌ two keys swapped ([#350](https://github.com/omacom/linux-aurora/issues/350)) |
+| new | ISO keyboard | 🟡 two keys swapped ([#350](https://github.com/omacom/linux-aurora/issues/350)); `iso_layout=1` workaround in [desktop/iso-keyboard](../desktop/iso-keyboard/) |
 | new | Sound over DisplayPort | ❌ |
 
 ## History: 2026-10-14, own kernel and boot.bin
