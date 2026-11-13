@@ -1,5 +1,9 @@
 # Kernel: external displays on the MacBook Air M3
 
+> **History.** Since 2026-11-04 this Mac runs the packaged `linux-aurora`; the 12-patch series landed
+> upstream as [#114](https://github.com/omacom/linux-aurora/pull/114). Still open from here: the
+> lid-closed second display, now carried as [#127](https://github.com/omacom/linux-aurora/pull/127).
+
 A 12-patch series on top of the Aurora kernel that drives the T8122 `dcpext` display coprocessor
 through both USB-C ports of the J613 (MacBook Air 13" M3), plus a 6-patch set for two external
 displays with the lid closed.

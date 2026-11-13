@@ -3,9 +3,13 @@
 | Where | What | Status |
 |---|---|---|
 | [omacom/linux-aurora#102](https://github.com/omacom/linux-aurora/issues/102) | PMP record bits for T8122 devices (kernel patch 0001) | filed 2026-10-13 |
-| [omacom/linux-aurora#103](https://github.com/omacom/linux-aurora/issues/103) | J613 external displays over USB-C, branch offered | filed 2026-10-13; maintainer carried it as #114; our test results posted there 2026-10-14 |
-| [omacom/linux-aurora#114](https://github.com/omacom/linux-aurora/pull/114) | draft PR by the maintainer with our 12 patches, reworked: the kernel enables `dcpext` only when m1n1 sets `apple,t8122-dcpext-firmware-ready` | both requested test boots passed (with and without the marker) |
-| [omacom/linux-aurora#32](https://github.com/omacom/linux-aurora/issues/32) | panel brightness on 14.x M3 panels | known upstream; J613 not yet tested |
+| [omacom/linux-aurora#103](https://github.com/omacom/linux-aurora/issues/103) | J613 external displays over USB-C, branch offered | filed 2026-10-13; maintainer carried it as #114; aurora16 results for the J613 posted 2026-11-12 |
+| [omacom/linux-aurora#114](https://github.com/omacom/linux-aurora/pull/114) | draft PR by the maintainer with our 12 patches, reworked: the kernel enables `dcpext` only when m1n1 sets `apple,t8122-dcpext-firmware-ready` | both requested test boots passed; merged 2026-10-15 |
+| [omacom/linux-aurora#127](https://github.com/omacom/linux-aurora/pull/127) | lid closed: the internal pipe drives a second external display on the left-front port | open; rebased on aurora16 and tested 2026-11-12 |
+| [omacom/linux-aurora#163](https://github.com/omacom/linux-aurora/pull/163) | not ours: keeps a dock's USB when the display pipeline is taken | open; matches the dead monitor hub we saw on 2026-11-12 |
+| [omacom/omarchy-mac#690](https://github.com/omacom/omarchy-mac/pull/690) | move Macs onto the official packages | first J613 report posted 2026-11-12 |
+| [omacom/omarchy-mac#781](https://github.com/omacom/omarchy-mac/issues/781) | iwd fails on Broadcom Wi-Fi | J613 (BCM4388) data point posted 2026-11-12 |
+| [omacom/linux-aurora#32](https://github.com/omacom/linux-aurora/issues/32) | panel brightness on 14.x M3 panels | works on the J613 with the packaged aurora16 |
 | [omacom/linux-aurora#26](https://github.com/omacom/linux-aurora/issues/26) | M3 GPU start (DPE block, `patches-local/0003`) | comments |
 | [omacom/omarchy#15307](https://github.com/omacom/omarchy/issues/15307) | lid open: panel stays off | filed 2026-10-13 |
 | [omacom/omarchy#15368](https://github.com/omacom/omarchy/issues/15368) | lid closed with external displays: logind suspends when the display count drops to zero for a moment | filed 2026-10-14 |

@@ -13,5 +13,11 @@
 3. **Our kernel and boot.bin** for external displays: [../kernel/](../kernel/), [../boot/](../boot/).
 4. **Desktop helpers:** [../desktop/](../desktop/).
 
+5. **Official packages** (2026-11-04): moved to Omarchy's official Mac packages with
+   `omarchy-mac-migrate` ([omacom/omarchy-mac#690](https://github.com/omacom/omarchy-mac/pull/690));
+   this replaced our kernel, our boot.bin and GRUB with `linux-aurora`, `m1n1-aurora` and Limine.
+   On 2026-11-12 `omarchy channel set edge` for aurora16 (external displays on the J613). Steps 2
+   and 3 are history now; a new install would go straight to the official packages.
+
 Keep a backup of `/boot` (boot.bin, kernels, GRUB config) before steps 2 and 3, and never run the
 Asahi installer a second time on an installed system.

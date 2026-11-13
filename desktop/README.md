@@ -9,3 +9,7 @@
 
 They only use Omarchy's own commands, logind and the kernel log; nothing touches the boot chain.
 `lid-policy` replaces logind's lid handling while it runs (logind takes over again when it stops).
+
+On the official packages (2026-11) `lid-policy` and `lid-open-safety` still run here.
+`display-busy-notify` matches the log line of our old kernel patch 0012; with the packaged kernel it
+has not been checked yet.

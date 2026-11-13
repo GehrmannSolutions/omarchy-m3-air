@@ -1,4 +1,28 @@
-# Status and test criteria (2026-10-14)
+# Status and test criteria
+
+## 2026-11-12/13: official packages, edge channel (aurora16)
+
+Omarchy 4.5 (edge), `linux-aurora` 7.2.11.aurora16, `m1n1-aurora` 1.6.1.aurora23 with the packaged
+device trees, Limine. No own kernel, no own boot.bin. Same test displays as below.
+
+| # | Criterion | Result |
+|---|---|---|
+| K1 | Internal panel + GPU | ✅ (GPU capped at 618 MHz) |
+| K2 | USB-C data, Ethernet adapter, hub, charging | ✅ |
+| K3 | Ultrawide on the rear port, USB devices on its hub | ✅ alone; ❌ if plugged while the other display holds the pipeline: the hub stays dead until a reboot ([#163](https://github.com/omacom/linux-aurora/pull/163)) |
+| K4 | Portable display alone on the front port | ✅ |
+| K5/K6 | Switch between the ports | ✅ the waiting display lights up when the first one is unplugged |
+| K8 | Lid closed, two external displays | ❌ in the packages (the waiting display stays dark); ✅ with [#127](https://github.com/omacom/linux-aurora/pull/127) on aurora16 |
+| K17 | Panel brightness keys | ✅ |
+| K19 | CPU temperature limited | ✅ thermal zones in the packaged device tree |
+| new | Touch ID (setup, sudo, lock screen) | ✅ with `omarchy setup security fingerprint` |
+| new | Speakers, microphone, keyboard backlight | ✅ |
+| new | Hotplug memory leak | ✅ gone (5 hotplugs, +1.6 MB) |
+| new | Clock after boot | ❌ starts at 1970 until NTP ([omarchy-mac#782](https://github.com/omacom/omarchy-mac/issues/782)) |
+| new | ISO keyboard | ❌ two keys swapped ([#350](https://github.com/omacom/linux-aurora/issues/350)) |
+| new | Sound over DisplayPort | ❌ |
+
+## History: 2026-10-14, own kernel and boot.bin
 
 Kernel `7.1.12-fay-v2` ([../kernel/](../kernel/)): since 2026-10-14 omacom/linux-aurora#114 (the maintainer's
 version of our 12-patch series) plus the lid-closed set (`patches-clamshell/`), with our boot.bin

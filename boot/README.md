@@ -1,5 +1,8 @@
 # boot.bin: device tree with dcpext on both USB-C ports
 
+> **History.** `m1n1-aurora` 1.6.1.aurora23 (with `linux-aurora` aurora16) turns `dcpext` on for the
+> J613 by itself, so this boot.bin is no longer needed. Kept as a record.
+
 On Asahi/Aurora systems the device tree reaches the kernel through **boot.bin** (m1n1 stage 2 +
 device trees + U-Boot), which `update-m1n1` rebuilds on package updates. The stock Aurora device
 trees have no `dcpext`, so the USB-C ports carry no display. We build boot.bin with our own J613

@@ -14,33 +14,44 @@ machine: what works, how we got there, and the state we run every day.
 > m1n1, whose policies forbid AI-assisted contributions. Upstream reports go only to projects that
 > accept disclosed AI-assisted work (see [docs/upstream.md](docs/upstream.md)).
 
-## Status (2026-10-14)
+## Status (2026-11-13)
 
-| Area | Status |
+**Since 2026-11-04 this Mac runs Omarchy's official packages** (Omarchy Mac, `linux-aurora`,
+`m1n1-aurora`, Limine), moved over with `omarchy-mac-migrate`
+([omacom/omarchy-mac#690](https://github.com/omacom/omarchy-mac/pull/690)). Since 2026-11-12 it is on
+the **edge** channel: Omarchy 4.5, `linux-aurora` 7.2.11.aurora16, `m1n1-aurora` 1.6.1.aurora23.
+Our own kernel, our boot.bin and most of this repo are no longer needed for daily use: external
+displays over USB-C now come from the packages (our series landed upstream as
+[omacom/linux-aurora#114](https://github.com/omacom/linux-aurora/pull/114)). What is still ours: the
+lid-closed second display ([#127](https://github.com/omacom/linux-aurora/pull/127), open) and a few
+desktop helpers.
+
+| Area | Status on the official packages (edge, aurora16) |
 |---|---|
-| Internal panel | works (Aurora DCP, firmware 14.7 interface) |
-| GPU (M3 G15G) | works on Aurora and mesa-m3 (the #114 base writes the power block itself; older bases need our DPE patch, `asahi.t8122_dpe_leak=1`) |
-| External display over USB-C, either port | works with our series ([kernel/](kernel/)) and our boot.bin DT ([boot/](boot/)) |
-| Switching the display between the two ports | works both ways without replugging |
-| Second external display at the same time | not possible with the lid open (one external pipeline); the second display waits and the desktop says so |
-| Lid closed, one external display | works ([desktop/lid-open-safety](desktop/lid-open-safety/) covers missed lid-open events) |
-| Lid closed, two external displays | works in our daily kernel with the [lid-policy](desktop/lid-policy/) helper; experimental patches in [kernel/patches-clamshell/](kernel/patches-clamshell/), not in a release yet ([docs/clamshell.md](docs/clamshell.md)) |
-| USB-C data (USB 2/3), Ethernet adapters, hubs, charging | works |
-| Wi-Fi, Bluetooth, suspend (s2idle) | works (Bluetooth logs a few command timeouts when entering suspend) |
-| Panel brightness keys | not working: no backlight control on the 14.x firmware path ([omacom/linux-aurora#32](https://github.com/omacom/linux-aurora/issues/32)) |
-| Touch ID | not working (no SEP node in the device tree) |
-| CPU temperature limit | works since 2026-10-14 with thermal zones in our boot.bin device tree; before, nothing throttled and the P cores reached 111 C ([docs/power-and-thermal.md](docs/power-and-thermal.md)) |
-| Battery life | about 7 h of mixed use, about 9 h idle with the screen on; GPU capped at 618 MHz for now ([docs/power-and-thermal.md](docs/power-and-thermal.md)) |
+| Internal panel, GPU (M3 G15G) | works; GPU capped at 618 MHz by the package |
+| Panel brightness keys | works (`apple-panel-bl`) |
+| Keyboard backlight | works (Ctrl+F1/F2) |
+| Speakers, microphone | works |
+| Touch ID | works with Omarchy's own setup (`omarchy setup security fingerprint`), incl. sudo and the lock screen |
+| External display over USB-C, either port | works, **one at a time**: a second display waits for the single external pipeline and lights up when the first one is unplugged |
+| Lid closed, two external displays | not in the packages yet: works with our open PR [#127](https://github.com/omacom/linux-aurora/pull/127) (tested on aurora16 on 2026-11-12) |
+| Sound over DisplayPort | not working yet |
+| USB-C data, hubs, Ethernet adapters, charging | works; a monitor's USB hub stays dead if it is plugged in while another display holds the pipeline ([#163](https://github.com/omacom/linux-aurora/pull/163) fixes it; until then unplug one display before plugging the other, a reboot clears it) |
+| Wi-Fi, Bluetooth | works; Wi-Fi with wpa_supplicant (iwd fails on this chip, [omarchy-mac#781](https://github.com/omacom/omarchy-mac/issues/781)) |
+| Suspend (s2idle) | works, but drains the battery overnight with the lid closed on battery ([#403](https://github.com/omacom/linux-aurora/issues/403)) |
+| CPU temperature limit | works (CPU thermal zones in the packaged device tree) |
+| Clock | starts at 1970 on every boot until NTP corrects it ([omarchy-mac#782](https://github.com/omacom/omarchy-mac/issues/782)) |
+| ISO keyboard | the `<>` key and the key left of 1 are swapped ([#350](https://github.com/omacom/linux-aurora/issues/350)) |
 
-Details and test criteria: [docs/status.md](docs/status.md).
+Details and the older test record: [docs/status.md](docs/status.md).
 
 ## Layout
 
 | Folder | What |
 |---|---|
-| [install/](install/) | how the machine was installed (Asahi Alarm, Omarchy, Aurora) |
-| [kernel/](kernel/) | the patch series on top of Aurora (12 patches, plus 10 experimental ones for the lid-closed case) and the scripts we build it with |
-| [boot/](boot/) | how our boot.bin is built: m1n1 change and device-tree change, no prebuilt binary |
+| [install/](install/) | how the machine was installed, and the move to the official packages |
+| [kernel/](kernel/) | history: our patch series on top of Aurora (now upstream as #114) and the lid-closed patches |
+| [boot/](boot/) | history: how our boot.bin was built; not needed with `m1n1-aurora` aurora23 and later |
 | [desktop/](desktop/) | small user services and fixes for Omarchy on this Mac |
 | [docs/](docs/) | status, lid-closed work, power and temperatures, upstream reports |
 | [archive/](archive/) | the first attempts before the Aurora kernel (2026-10-02 to 10-11), kept as they were |
