@@ -18,6 +18,16 @@
    this replaced our kernel, our boot.bin and GRUB with `linux-aurora`, `m1n1-aurora` and Limine.
    On 2026-11-12 `omarchy channel set edge` for aurora16 (external displays on the J613). Steps 2
    and 3 are history now; a new install would go straight to the official packages.
+6. **Check the platform group after the move** (2026-11-13): the migration had installed the kernel and
+   boot packages, but most of the group `omarchy-platform-apple-silicon` was missing; the machine still ran
+   Arch `mesa`, `asahi-audio`, `uboot-asahi` and our own Mesa build. Check with
+   `pacman -Sg omarchy-platform-apple-silicon | awk '{print $2}' | xargs pacman -T`, then install the
+   missing ones, e.g.
+   `sudo pacman -S mesa-aurora vulkan-aurora aurora-audio alsa-ucm-conf-aurora uboot-aurora aurora-bless speakerguardd omarchy-aurora-firmware`
+   (pacman asks to replace the asahi packages). `uboot-aurora` rebuilds `boot.bin` and the kernel image is
+   rebuilt too; take a snapper snapshot first and reboot afterwards. `aura` (another bootloader) and the ML
+   packages are optional and not installed here. Old leftovers from steps 2 and 3 (the `grub` package,
+   `/boot/grub`, old module trees in `/usr/lib/modules`, old mkinitcpio drop-ins) can go once Limine boots.
 
 Keep a backup of `/boot` (boot.bin, kernels, GRUB config) before steps 2 and 3, and never run the
 Asahi installer a second time on an installed system.

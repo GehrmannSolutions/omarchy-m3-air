@@ -28,7 +28,7 @@ desktop helpers.
 
 | Area | Status on the official packages (edge, aurora16) |
 |---|---|
-| Internal panel, GPU (M3 G15G) | works; GPU capped at 618 MHz by the package |
+| Internal panel, GPU (M3 G15G) | works with `mesa-aurora` (Vulkan: Borealis, from Honeykrisp); GPU capped at 618 MHz by the package. Check that the whole platform group is installed ([install step 6](install/)) |
 | Panel brightness keys | works (`apple-panel-bl`) |
 | Keyboard backlight | works (Ctrl+F1/F2) |
 | Speakers, microphone | works |
@@ -41,7 +41,7 @@ desktop helpers.
 | Suspend (s2idle) | works, but drains the battery overnight with the lid closed on battery ([#403](https://github.com/omacom/linux-aurora/issues/403)) |
 | CPU temperature limit | works (CPU thermal zones in the packaged device tree) |
 | Clock | starts at 1970 on every boot until NTP corrects it ([omarchy-mac#782](https://github.com/omacom/omarchy-mac/issues/782)) |
-| ISO keyboard | the `<>` key and the key left of 1 are swapped ([#350](https://github.com/omacom/linux-aurora/issues/350)); fixed here with `hid_apple` `iso_layout=1` ([desktop/iso-keyboard](desktop/iso-keyboard/)) |
+| ISO keyboard | the `<>` key and the key left of 1 are swapped ([#350](https://github.com/omacom/linux-aurora/issues/350)); fixed here with `hid_apple` `iso_layout=1`; an external Logitech keyboard in the Mac variant swaps them too, fixed with a hwdb rule ([desktop/iso-keyboard](desktop/iso-keyboard/)) |
 
 Details and the older test record: [docs/status.md](docs/status.md).
 

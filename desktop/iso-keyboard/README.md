@@ -12,3 +12,16 @@ ANSI (US) Mac it swaps keys that were right.
 
 Install: copy them to `/etc/tmpfiles.d/90-tars-hid-apple-iso.conf` and `/etc/modprobe.d/90-tars-hid-apple-iso.conf`,
 then `sudo systemd-tmpfiles --create`. Undo: remove both files and reboot.
+
+Checked on 2026-11-13 on a German ISO J613: without the setting the key left of 1 sends `KEY_102ND`
+(`<`) and the key next to left Shift sends `KEY_GRAVE` (`^`); with `iso_layout=1` both are right.
+
+## External Logitech keyboard (Mac variant)
+
+A Logitech keyboard in the Mac layout on a Logitech USB receiver sends the same two keys swapped, and
+`hid_apple` does not handle it (it is a `usbhid` device). `hwdb-90-tars-logitech-iso.hwdb` swaps them
+back for the receiver `046d:c548` (Bolt); change the product id for another receiver (`lsusb`).
+It applies to every keyboard paired with that receiver, so leave it out for a PC-layout Logitech.
+
+Install: copy it to `/etc/udev/hwdb.d/90-tars-logitech-iso.hwdb`, then
+`sudo systemd-hwdb update && sudo udevadm trigger -s input`. Undo: remove it and run the same two commands.

@@ -1,0 +1,6 @@
+# TARS 2026-11-13: Logitech keyboard on the Bolt receiver (046d:c548) sends the ISO keys swapped
+# (Mac variant, like Apple): key left of 1 -> 0x70064, key next to left Shift -> 0x70035. Swap them back.
+# Note: applies to every keyboard paired with this receiver.
+evdev:input:b0003v046DpC548*
+ KEYBOARD_KEY_70035=102nd
+ KEYBOARD_KEY_70064=grave

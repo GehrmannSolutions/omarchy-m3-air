@@ -19,7 +19,8 @@ device trees, Limine. No own kernel, no own boot.bin. Same test displays as belo
 | new | Speakers, microphone, keyboard backlight | ✅ |
 | new | Hotplug memory leak | ✅ gone (5 hotplugs, +1.6 MB) |
 | new | Clock after boot | ❌ starts at 1970 until NTP ([omarchy-mac#782](https://github.com/omacom/omarchy-mac/issues/782)) |
-| new | ISO keyboard | 🟡 two keys swapped ([#350](https://github.com/omacom/linux-aurora/issues/350)); `iso_layout=1` workaround in [desktop/iso-keyboard](../desktop/iso-keyboard/) |
+| new | ISO keyboard (German layout) | ✅ with workarounds: internal keyboard `iso_layout=1` ([#350](https://github.com/omacom/linux-aurora/issues/350)), external Logitech Mac-variant keyboard via hwdb; both in [desktop/iso-keyboard](../desktop/iso-keyboard/) (2026-11-13) |
+| new | Full platform group (`mesa-aurora`, `aurora-audio`, `uboot-aurora`, ...) | ✅ installed 2026-11-13, see [install step 6](../install/); graphics, Vulkan, speakers and microphone checked after the reboot |
 | new | Sound over DisplayPort | ❌ |
 
 ## History: 2026-10-14, own kernel and boot.bin
